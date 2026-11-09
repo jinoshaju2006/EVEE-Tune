@@ -178,126 +178,126 @@ jobs:
           shell = main_shell.read_text(encoding="utf-8")
           dialog_pattern = r'@Composable\nprivate fun JoinSupportDialog\(\n    onDismiss: \(\) -> Unit,\n\) \{.*?\n\}\n\nprivate fun openMaterialYouChannel'
           dialog_replacement = '''@Composable
-         private fun JoinSupportDialog(
-             onDismiss: () -> Unit,
-         ) {
-             val context = LocalContext.current
-             AlertDialog(
-                 onDismissRequest = onDismiss,
-                 shape = RoundedCornerShape(24.dp),
-                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                 title = {
-                     Row(
-                         modifier = Modifier.fillMaxWidth(),
-                         verticalAlignment = Alignment.CenterVertically,
-                         horizontalArrangement = Arrangement.SpaceBetween,
-                     ) {
-                         Column {
-                             Text(
-                                 text = "Developed By EVO/Jino",
-                                 style = MaterialTheme.typography.titleMedium,
-                                 fontWeight = FontWeight.Bold,
-                             )
-                             Text(
-                                 text = "EVEE Tune developer and support",
-                                 style = MaterialTheme.typography.labelSmall,
-                                 color = MaterialTheme.colorScheme.primary,
-                                 fontWeight = FontWeight.SemiBold,
-                             )
-                         }
-                         IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                             Icon(
-                                 imageVector = Icons.Filled.Close,
-                                 contentDescription = "Close",
-                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                 modifier = Modifier.size(18.dp),
-                             )
-                         }
-                     }
-                 },
-                 text = {
-                     Column(
-                         modifier = Modifier.fillMaxWidth(),
-                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                     ) {
-                         Text(
-                             text = "Connect directly for reporting bugs and any other issues.",
-                             style = MaterialTheme.typography.bodySmall,
-                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                         )
-                         Surface(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .clip(RoundedCornerShape(14.dp))
-                                 .clickable {
-                                     runCatching {
-                                         context.startActivity(
-                                             android.content.Intent(
-                                                 android.content.Intent.ACTION_VIEW,
-                                                 android.net.Uri.parse("https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA=="),
-                                             ),
-                                         )
-                                     }.onFailure {
-                                         android.widget.Toast.makeText(context, "No browser available to open Instagram", android.widget.Toast.LENGTH_SHORT).show()
-                                     }
-                                     onDismiss()
-                                 },
-                             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.70f),
-                             shape = RoundedCornerShape(14.dp),
-                         ) {
-                             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-                                 Text("Instagram", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                                 Text(
-                                     "https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA==",
-                                     style = MaterialTheme.typography.bodySmall,
-                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                 )
-                             }
-                         }
-                         Surface(
-                             modifier = Modifier
-                                 .fillMaxWidth()
-                                 .clip(RoundedCornerShape(14.dp))
-                                 .clickable {
-                                     runCatching {
-                                         context.startActivity(
-                                             android.content.Intent(
-                                                 android.content.Intent.ACTION_SENDTO,
-                                                 android.net.Uri.parse("mailto:jinomattathil@gmail.com"),
-                                             ),
-                                         )
-                                     }.onFailure {
-                                         android.widget.Toast.makeText(context, "No email app available", android.widget.Toast.LENGTH_SHORT).show()
-                                     }
-                                     onDismiss()
-                                 },
-                             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.70f),
-                             shape = RoundedCornerShape(14.dp),
-                         ) {
-                             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-                                 Text(
-                                     "Connect directly for reporting bugs and any other issues",
-                                     style = MaterialTheme.typography.labelLarge,
-                                     fontWeight = FontWeight.SemiBold,
-                                 )
-                                 Text(
-                                     "jinomattathil@gmail.com",
-                                     style = MaterialTheme.typography.bodySmall,
-                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                 )
-                             }
-                         }
-                     }
-                 },
-                 confirmButton = {
-                     FilledTonalButton(onClick = onDismiss, shape = RoundedCornerShape(14.dp)) {
-                         Text("Close", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                     }
-                 },
-             )
-         }
-         
-         private fun openMaterialYouChannel'''
+          private fun JoinSupportDialog(
+              onDismiss: () -> Unit,
+          ) {
+              val context = LocalContext.current
+              AlertDialog(
+                  onDismissRequest = onDismiss,
+                  shape = RoundedCornerShape(24.dp),
+                  containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                  title = {
+                      Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          verticalAlignment = Alignment.CenterVertically,
+                          horizontalArrangement = Arrangement.SpaceBetween,
+                      ) {
+                          Column {
+                              Text(
+                                  text = "Developed By EVO/Jino",
+                                  style = MaterialTheme.typography.titleMedium,
+                                  fontWeight = FontWeight.Bold,
+                              )
+                              Text(
+                                  text = "EVEE Tune developer and support",
+                                  style = MaterialTheme.typography.labelSmall,
+                                  color = MaterialTheme.colorScheme.primary,
+                                  fontWeight = FontWeight.SemiBold,
+                              )
+                          }
+                          IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                              Icon(
+                                  imageVector = Icons.Filled.Close,
+                                  contentDescription = "Close",
+                                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  modifier = Modifier.size(18.dp),
+                              )
+                          }
+                      }
+                  },
+                  text = {
+                      Column(
+                          modifier = Modifier.fillMaxWidth(),
+                          verticalArrangement = Arrangement.spacedBy(10.dp),
+                      ) {
+                          Text(
+                              text = "Connect directly for reporting bugs and any other issues.",
+                              style = MaterialTheme.typography.bodySmall,
+                              color = MaterialTheme.colorScheme.onSurfaceVariant,
+                          )
+                          Surface(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .clip(RoundedCornerShape(14.dp))
+                                  .clickable {
+                                      runCatching {
+                                          context.startActivity(
+                                              android.content.Intent(
+                                                  android.content.Intent.ACTION_VIEW,
+                                                  android.net.Uri.parse("https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA=="),
+                                              ),
+                                          )
+                                      }.onFailure {
+                                          android.widget.Toast.makeText(context, "No browser available to open Instagram", android.widget.Toast.LENGTH_SHORT).show()
+                                      }
+                                      onDismiss()
+                                  },
+                              color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.70f),
+                              shape = RoundedCornerShape(14.dp),
+                          ) {
+                              Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                                  Text("Instagram", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                  Text(
+                                      "https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA==",
+                                      style = MaterialTheme.typography.bodySmall,
+                                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  )
+                              }
+                          }
+                          Surface(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .clip(RoundedCornerShape(14.dp))
+                                  .clickable {
+                                      runCatching {
+                                          context.startActivity(
+                                              android.content.Intent(
+                                                  android.content.Intent.ACTION_SENDTO,
+                                                  android.net.Uri.parse("mailto:jinomattathil@gmail.com"),
+                                              ),
+                                          )
+                                      }.onFailure {
+                                          android.widget.Toast.makeText(context, "No email app available", android.widget.Toast.LENGTH_SHORT).show()
+                                      }
+                                      onDismiss()
+                                  },
+                              color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.70f),
+                              shape = RoundedCornerShape(14.dp),
+                          ) {
+                              Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                                  Text(
+                                      "Connect directly for reporting bugs and any other issues",
+                                      style = MaterialTheme.typography.labelLarge,
+                                      fontWeight = FontWeight.SemiBold,
+                                  )
+                                  Text(
+                                      "jinomattathil@gmail.com",
+                                      style = MaterialTheme.typography.bodySmall,
+                                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  )
+                              }
+                          }
+                      }
+                  },
+                  confirmButton = {
+                      FilledTonalButton(onClick = onDismiss, shape = RoundedCornerShape(14.dp)) {
+                          Text("Close", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                      }
+                  },
+              )
+          }
+          
+          private fun openMaterialYouChannel'''
           shell, dialog_count = re.subn(dialog_pattern, lambda _: dialog_replacement, shell, count=1, flags=re.DOTALL)
           if dialog_count != 1:
               raise SystemExit("Could not replace the first-launch Join Support dialog; stopping without committing.")
