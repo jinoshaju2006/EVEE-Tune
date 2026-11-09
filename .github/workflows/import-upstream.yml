@@ -107,6 +107,55 @@ jobs:
           if about_count != 1:
               raise SystemExit("Could not set the EVEE Tune developer credit; stopping without committing.")
           strings_file.write_text(strings, encoding="utf-8")
+
+          # Replace the upstream About & Community links with EVEE Tune's contact details.
+          settings_screen = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsScreen.kt")
+          if settings_screen.exists():
+              screen = settings_screen.read_text(encoding="utf-8")
+              about_section = screen.find('SectionLabel(stringResource(R.string.settings_section_about))')
+              group_start = screen.find('SettingsGroup(rowCount = 4)', about_section)
+              group_end = screen.find('                    Spacer(Modifier.height(4.dp))', group_start)
+              if about_section < 0 or group_start < 0 or group_end < 0:
+                  raise SystemExit("Could not locate the About & Community cards; stopping without committing.")
+              replacement = '''SettingsGroup(rowCount = 2) { index, position ->
+                          when (index) {
+                              0 -> SettingsActionCard(
+                                  icon = Icons.Filled.Code,
+                                  iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                                  iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                  title = "Developed By EVO",
+                                  subtitle = "Instagram: https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA==",
+                                  onClick = {
+                                      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA=="))
+                                      if (!startActivitySafely(context, intent)) {
+                                          viewModel.showToast(context.getString(R.string.toast_no_browser))
+                                      }
+                                  },
+                                  position = position,
+                                  isHighlighted = (highlightedSettingId == "about.developer"),
+                              )
+                              1 -> SettingsActionCard(
+                                  icon = Icons.AutoMirrored.Filled.Send,
+                                  iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                                  iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                  title = "Connect directly for reporting bugs and any other issues",
+                                  subtitle = "jinomattathil@gmail.com",
+                                  onClick = {
+                                      val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:jinomattathil@gmail.com"))
+                                      if (!startActivitySafely(context, intent)) {
+                                          viewModel.showToast(context.getString(R.string.toast_no_browser))
+                                      }
+                                  },
+                                  position = position,
+                                  isHighlighted = (highlightedSettingId == "about.contact"),
+                              )
+                          }
+                      }
+'''
+              screen = screen[:group_start] + replacement + screen[group_end:]
+              screen = screen.replace('contentDescription = "LastWave"', 'contentDescription = "EVEE Tune"')
+              screen = screen.replace('Text("LastWave", style = MaterialTheme.typography.headlineSmall', 'Text("EVEE Tune", style = MaterialTheme.typography.headlineSmall')
+              settings_screen.write_text(screen, encoding="utf-8")
           PY
 
           cat > README.md <<'EOF'
