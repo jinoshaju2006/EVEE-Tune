@@ -313,6 +313,60 @@ jobs:
           screen = screen.replace(about_icon_old, about_icon_new, 1)
           settings_screen.write_text(screen, encoding="utf-8")
 
+          # Remove the LastWave desktop promotion from both About locations,
+          # and remove the complete More from us section and its three app cards.
+          screen = settings_screen.read_text(encoding="utf-8")
+
+          desktop_card_pattern = (
+              r'                    SettingsActionCard\(\n'
+              r'                        icon = Icons\.Filled\.Download,.*?'
+              r'                    \)\n\n'
+              r'                    Spacer\(Modifier\.height\(14\.dp\)\)\n'
+              r'                    SectionLabel\("More from us"\)\n'
+              r'                    Spacer\(Modifier\.height\(8\.dp\)\)\n'
+              r'                    MoreFromUsCard\(.*?\n                    \)\n'
+          )
+          screen, promo_count = re.subn(desktop_card_pattern, '', screen, count=1, flags=re.DOTALL)
+          if promo_count != 1:
+              raise SystemExit("Could not remove the desktop and More from us promotional section.")
+
+          # Remove the now-unused three-app promotional composable.
+          screen, more_count = re.subn(
+              r'private fun MoreFromUsCard\(.*?(?=private fun AboutCard\()',
+              '',
+              screen,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if more_count != 1:
+              raise SystemExit("Could not remove the MoreFromUsCard composable.")
+
+          # The About card has a second desktop download pill; remove it too.
+          about_start = screen.find("private fun AboutCard(")
+          about_end = screen.find("\nprivate fun openTelegramChannel", about_start)
+          if about_start < 0 or about_end < 0:
+              raise SystemExit("Could not locate the About card to remove its desktop link.")
+          about = screen[about_start:about_end]
+          about, about_desktop_count = re.subn(
+              r'            Surface\(\n'
+              r'                shape = ExpressivePillShape,\n'
+              r'                color = MaterialTheme\.colorScheme\.secondaryContainer,\n'
+              r'                onClick = \{\n'
+              r'                    val intent = Intent\(Intent\.ACTION_VIEW, Uri\.parse\("https://github\.com/Clash-Projects/LastWave-Desktop"\)\).*?'
+              r'            \}\n',
+              '',
+              about,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if about_desktop_count != 1:
+              raise SystemExit("Could not remove the desktop download pill from the About card.")
+          screen = screen[:about_start] + about + screen[about_end:]
+
+          if "LastWave-Desktop" in screen or 'SectionLabel("More from us")' in screen or "MoreFromUsCard(" in screen:
+              raise SystemExit("Promotional LastWave desktop or More from us content remains.")
+          settings_screen.write_text(screen, encoding="utf-8")
+
           PY
 
           cat > README.md <<'EOF'
