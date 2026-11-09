@@ -54,8 +54,15 @@ jobs:
           set -euo pipefail
           # Remove the previous imported source before overlaying the new upstream tree.
           # This prevents deleted/renamed upstream Kotlin files from surviving as stale duplicates.
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'README.md' -exec rm -rf {} +
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'README.md' ! -name 'evee_icon.png' -exec rm -rf {} +
           rsync -a --exclude='.git/' --exclude='.github/' --exclude='README.md' /tmp/lastwave-upstream/ ./
+          # Preserve the user-uploaded EVEE Tune artwork and install it as the adaptive launcher icon.
+          if [ ! -s evee_icon.png ]; then
+            echo 'evee_icon.png is missing from the repository root.' >&2
+            exit 1
+          fi
+          mkdir -p app/src/main/res/drawable-nodpi
+          cp evee_icon.png app/src/main/res/drawable-nodpi/evee_icon.png
 
           python3 <<'PY'
           from pathlib import Path
@@ -86,6 +93,14 @@ jobs:
           if count != 1:
               raise SystemExit("Could not update the launcher app label; stopping without committing.")
           strings_file.write_text(strings, encoding="utf-8")
+
+          # Point Android 8+ adaptive launcher icons at the supplied EVEE Tune artwork.
+          for icon_xml in (Path("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"), Path("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml")):
+              if icon_xml.exists():
+                  icon_text = icon_xml.read_text(encoding="utf-8")
+                  icon_text = re.sub(r'android:drawable="@drawable/ic_launcher_foreground"', 'android:drawable="@drawable/evee_icon"', icon_text)
+                  icon_text = re.sub(r'\\s*<monochrome\\s+android:drawable="@drawable/evee_icon"\\s*/>', '', icon_text)
+                  icon_xml.write_text(icon_text, encoding="utf-8")
 
           # Rebrand user-visible strings across default and translated resources.
           for resource_file in Path("app/src/main/res").glob("values*/strings.xml"):
