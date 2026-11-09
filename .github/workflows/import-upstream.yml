@@ -52,6 +52,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Remove the previous imported source before overlaying the new upstream tree.
+          # This prevents deleted/renamed upstream Kotlin files from surviving as stale duplicates.
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'README.md' -exec rm -rf {} +
           rsync -a --exclude='.git/' --exclude='.github/' --exclude='README.md' /tmp/lastwave-upstream/ ./
 
           python3 <<'PY'
