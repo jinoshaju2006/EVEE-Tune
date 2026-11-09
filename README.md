@@ -1,23 +1,31 @@
 # EVEE Tune
 
-An independent rebrand of [LastWave Native](https://github.com/Clash-Projects/LastWave-Native).
+EVEE Tune is an independent Android app rebrand based on [LastWave Native](https://github.com/Clash-Projects/LastWave-Native).
 
-**Status:** Initial repository scaffold. Android source has not yet been imported and no APK has been built.
+## Current status
+- Repository scaffold and source-import workflow are committed.
+- The Android source is imported by the GitHub Actions workflow; it is **not yet present** until that workflow completes.
+- App label target: **EVEE Tune**
+- Android application ID target: `com.evee.tune`
+- Upstream Kotlin namespace remains `com.lastwave.app` to preserve internal component references.
 
-## Branding
-- App name: EVEE Tune
-- Android application ID: `com.evee.tune`
-- Launcher icon: minimal black and red
+## Import and build
+1. Open the **Actions** tab.
+2. Select **Import EVEE Tune Android source**.
+3. Tap **Run workflow** on the `main` branch.
+4. Wait for the workflow to import the upstream source and attempt a debug build.
+5. If the build succeeds, open the completed run and download the **EVEE-Tune-debug** artifact.
 
-## License and attribution
-The upstream LastWave Native project is licensed under GNU GPL v3. This rebrand must preserve upstream copyright and license notices and comply with GPL v3 source-distribution requirements. See `LICENSE`.
+The workflow imports the upstream source, preserves the upstream license and notices, applies the EVEE Tune launcher label and application ID, commits the imported source to `main`, and attempts `./gradlew :app:assembleDebug`.
 
-This project is independent and is not affiliated with or endorsed by the upstream developers or any third-party music service.
+## Local build
+Use Android Studio with JDK 17 and Android SDK 37:
 
-## Planned work
-1. Import upstream Android source and notices.
-2. Apply the app label and application ID.
-3. Add an original launcher icon.
-4. Configure Android CI builds and test the resulting APK.
+```bash
+./gradlew :app:assembleDebug
+```
 
-Build instructions will be added after the Android source is imported.
+## Attribution and license
+This project is based on LastWave Native by its upstream contributors. Upstream copyright notices and the GPL-3.0 license are preserved. See [LICENSE](LICENSE) and the [upstream repository](https://github.com/Clash-Projects/LastWave-Native).
+
+EVEE Tune is independent and is not affiliated with or endorsed by the upstream developers or any music service. All third-party names and trademarks belong to their respective owners.
