@@ -35,7 +35,11 @@ jobs:
 
       - name: Install Android build components
         run: |
-          sdkmanager "platforms;android-37" "cmake;3.22.1" "ndk;27.2.12479018"
+          sdkmanager "platforms;android-37.0" "cmake;3.22.1" "ndk;27.2.12479018"
+          # Android SDK publishes API 37 under android-37.0; AGP 9.1 expects android-37.
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
 
       - name: Download upstream source
         run: |
