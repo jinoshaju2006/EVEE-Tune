@@ -257,7 +257,7 @@ class WaveWidgetActionReceiver : android.content.BroadcastReceiver() {
         val original = WaveWidgetState.read(context)
         val optimistic = WaveLikeOptimism.optimistic(original)
         WaveWidgetUpdater.updateState(context, optimistic)
-        val confirmed = runCatching { likeController.toggle(track) }.getOrNull()
+        val confirmed = runCatching { likeController.toggle(track).liked }.getOrNull()
         WaveWidgetUpdater.updateState(context, WaveLikeOptimism.settle(original, optimistic, confirmed))
     }
 

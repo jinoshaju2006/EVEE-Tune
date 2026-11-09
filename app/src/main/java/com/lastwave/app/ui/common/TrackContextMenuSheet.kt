@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SmartDisplay
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
@@ -231,6 +232,17 @@ fun downloadLabelForQuality(context: android.content.Context, quality: Int): Str
     return context.getString(R.string.menu_download_tier, tier)
 }
 
+@HiltViewModel
+class RecommendationExclusionMenuViewModel @Inject constructor(
+    private val discoverRepository: com.lastwave.app.data.discover.DiscoverRepository,
+) : ViewModel() {
+    fun exclude(trackName: String, artistName: String) {
+        viewModelScope.launch {
+            discoverRepository.excludeFromRecommendations(trackName, artistName)
+        }
+    }
+}
+
 /** Same idea, for the Genre row — every caller (Home, Discover, Playlist,
  *  Search) gets "tap the genre to open it in Genres" for free, without
  *  each of them needing to pass onExploreGenre + a NavController down
@@ -382,11 +394,11 @@ fun TrackContextMenuSheet(
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onRemoveFromQueue: (() -> Unit)? = null,
     onWatchVideo: (() -> Unit)? = null,
-    canWatchVideo: Boolean = true,
     genreResolverViewModel: GenreRowViewModel = hiltViewModel(),
     startMixViewModel: StartMixMenuViewModel = hiltViewModel(),
     exploreGenreViewModel: ExploreGenreMenuViewModel = hiltViewModel(),
     downloadViewModel: DownloadMenuViewModel = hiltViewModel(),
+    exclusionViewModel: RecommendationExclusionMenuViewModel = hiltViewModel(),
     artistAlbumViewModel: ArtistAlbumMenuViewModel = hiltViewModel(),
     trackLinkViewModel: TrackLinkViewModel = hiltViewModel(),
 ) {
@@ -612,7 +624,7 @@ fun TrackContextMenuSheet(
                         }
                     }
 
-                    if (musicVideoEnabled && canWatchVideo) {
+                    if (musicVideoEnabled) {
                         add { pos ->
                             MenuActionRow(
                                 icon = Icons.Filled.SmartDisplay,
@@ -749,6 +761,12 @@ fun TrackContextMenuSheet(
                     add { pos ->
                         MenuActionRow(Icons.Filled.Info, stringResource(R.string.menu_details_specs), position = pos) {
                             showDetailsSheet = true
+                        }
+                    }
+                    add { pos ->
+                        MenuActionRow(Icons.Filled.ThumbDown, stringResource(R.string.menu_dont_recommend), danger = true, position = pos) {
+                            exclusionViewModel.exclude(t.name, t.artist)
+                            onDismiss()
                         }
                     }
                     if (onRemoveFromPlaylist != null) {

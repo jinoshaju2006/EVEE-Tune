@@ -6,7 +6,7 @@ EVEE Tune is an independent Android app rebrand based on [LastWave Native](https
 - App label: **EVEE Tune**
 - Android application ID: `com.evee.tune`
 - Upstream code namespace: `com.lastwave.app` (kept internally to avoid breaking upstream component references)
-- Upstream baseline: latest `main` branch at import time
+- Upstream baseline: verified build commit `b3234549a51b1d77ab9c50fabfe88ea0b869380f` (LastWave v5.1.2)
 - Build: GitHub Actions debug APK
 
 ## Build

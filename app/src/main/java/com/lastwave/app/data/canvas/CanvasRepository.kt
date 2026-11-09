@@ -221,18 +221,30 @@ class CanvasRepository @Inject constructor(
             return null
         }
 
-        // Only official Apple Music artist motion animation is used on artist profiles.
-        // Third-party song canvases (Spotify/Tidal/Community) are track video loops that look out of place on an artist profile.
+        val preferSpotify = spotifyPreferences.isPreferSpotifyCanvas()
+        syncProviderOrder(preferSpotify)
+
         return resolve(key, withAlbum = false) {
-            val appleMotion = AppleMusicCanvas.searchArtist(okHttpClient, credit)
-            if (appleMotion != null) {
+            val sources = buildList<suspend () -> CanvasArtwork?> {
+                if (preferSpotify) {
+                    add { spotifyCanvas.search(credit, credit) }
+                }
+                add { AppleMusicCanvas.searchArtist(okHttpClient, credit) }
+                add { TidalCanvas.searchAlbum(okHttpClient, credit, credit) }
+                add { CommunityCanvas.search(okHttpClient, credit, credit, null) }
+                if (!preferSpotify) {
+                    add { spotifyCanvas.search(credit, credit) }
+                }
+            }
+            firstHit(*sources.toTypedArray()) { artwork ->
+                // The clip must credit THIS artist: an uncredited clip, or a
+                // substring hit ("Mo" in "Mohit"), put another artist's
+                // motion video on the profile.
                 val want = credit.normalizeForMatch()
-                val credited = com.lastwave.app.util.ArtistHelper.splitArtists(appleMotion.artist)
+                val credited = com.lastwave.app.util.ArtistHelper.splitArtists(artwork.artist)
                     .map { it.normalizeForMatch() }
-                if (want.isNotBlank() && (appleMotion.artist?.normalizeForMatch() == want || credited.any { it == want })) {
-                    appleMotion
-                } else null
-            } else null
+                want.isNotBlank() && (artwork.artist?.normalizeForMatch() == want || credited.any { it == want })
+            }
         }
     }
 

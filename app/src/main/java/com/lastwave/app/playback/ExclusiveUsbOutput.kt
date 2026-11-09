@@ -79,7 +79,7 @@ class ExclusiveUsbOutput @Inject constructor(
      *  the next successful start so a stale reason never shows. */
     @Volatile var lastFailureReason: String? = null
         private set
-    @Volatile private var lastAppliedListening = Float.NaN
+    @Volatile private var lastAppliedCombined = Float.NaN
     private var volumeProbed = false
     @Volatile private var lastNonMaxListeningGain = Float.NaN
     @Volatile private var ignoreStreamMusicMax = false
@@ -98,6 +98,7 @@ class ExclusiveUsbOutput @Inject constructor(
     init {
         clearBlockedDevices()
         lastNonMaxListeningGain = volumePrefs.getFloat(KEY_LAST_NON_MAX_GAIN, Float.NaN)
+        rememberStreamGain(readStreamMusicGain())
     }
 
     private val volumeReceiver = object : BroadcastReceiver() {
@@ -149,7 +150,7 @@ class ExclusiveUsbOutput @Inject constructor(
             if (value && active && hardwareVolume) {
                 val fv = featureVolume
                 hardwareVolume = false
-                lastAppliedListening = Float.NaN
+                lastAppliedCombined = Float.NaN
                 applyVolumeLocked()
                 runCatching { fv?.setNormalized(1f) }
                 Log.i(TAG, "volume forced to software; Feature Unit parked at 0 dB")
@@ -173,10 +174,10 @@ class ExclusiveUsbOutput @Inject constructor(
     fun usesHardwareVolume(): Boolean = active && hardwareVolume
 
     /**
-     * PCM software gain for exclusive output: the Media3 volume, times the
-     * curved STREAM_MUSIC level when no Feature Unit carries it.
+     * PCM software gain for exclusive output. 1 when a verified Feature Unit
+     * owns listening level; otherwise STREAM_MUSIC × Media3 volume.
      */
-    fun softwareGain(): Float = if (!active) 1f else softwareGainValue
+    fun softwareGain(): Float = if (!active || hardwareVolume) 1f else softwareGainValue
 
     fun currentRateHz(): Int = if (active) configuredRateHz else 0
 
@@ -276,12 +277,8 @@ class ExclusiveUsbOutput @Inject constructor(
         // change (a volume key press) ends the hold and applies normally.
         if (ignoreStreamMusicMax && stream >= ATTACH_MAX_PIN_GAIN) return
         if (stream < ATTACH_MAX_PIN_GAIN) ignoreStreamMusicMax = false
-        // Only a level chosen while listening through the DAC is its listening
-        // level. Remembering every read stored the phone-speaker volume taken
-        // at app start, and the next attach opened the DAC at ~-53 dB.
-        if (active) rememberStreamGain(stream)
         val next = stream
-        if (lastAppliedListening.isFinite() &&
+        if (lastAppliedCombined.isFinite() &&
             kotlin.math.abs(next - listeningGain) < 1e-4f
         ) {
             listeningGain = next
@@ -369,19 +366,34 @@ class ExclusiveUsbOutput @Inject constructor(
             startMediaTimeNeedsInit = false
         }
         recheckClockLocked()
-        // Queued unscaled: gain is applied by the writer as each chunk leaves
-        // the queue, so a volume change is heard now, not ~3 s of queue later.
+        val gain = softwareGain()
+        val fromGain = lastPcmGain
+        lastPcmGain = gain
+        val channels = activeChannels
+        // ~10ms glide on volume changes (removes zipper noise); a steady
+        // gain takes exactly the previous constant-gain path.
+        val rampFrames = (configuredRateHz / 100).coerceAtLeast(1)
         val chunk = if (isFloatBuffer) {
             val floats = FloatArray(size / Float.SIZE_BYTES)
             buffer.order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(floats)
             buffer.position(buffer.limit())
+            ExclusivePcmGain.applyRamped(floats, fromGain, gain, channels, rampFrames)
             QueuedPcm(floats, null, 0, size)
         } else {
             val encoding = writeRawEncoding(sourceEncoding)
             if (encoding < 0) return false
             val bytes = ByteArray(size)
             buffer.get(bytes)
-            QueuedPcm(null, bytes, encoding, size)
+            val attenuate = gain >= 0f && (gain < 1f - 1e-6f || fromGain < 1f - 1e-6f)
+            if (attenuate && encoding == RAW_PCM16 && activeWireBits > 16) {
+                // Scale into 24 bits instead of back into 16: same level, no
+                // added quantization noise. The native layer passes 24-bit
+                // through (or pads it to a 32-bit alt) losslessly.
+                QueuedPcm(null, scalePcm16To24(bytes, fromGain, gain, channels, rampFrames), RAW_PCM24, size)
+            } else {
+                if (attenuate) scalePcmRamped(bytes, encoding, fromGain, gain, channels, rampFrames)
+                QueuedPcm(null, bytes, encoding, size)
+            }
         }
         synchronized(pcmLock) {
             if (paused || writerStop) return false
@@ -466,6 +478,10 @@ class ExclusiveUsbOutput @Inject constructor(
             paused = false
             pcmLock.notifyAll()
         }
+        synchronized(stateLock) {
+            pendingVolume = 1f
+            applyVolumeLocked()
+        }
         startMediaTimeNeedsInit = true
         startMediaTimeUs = 0L
         currentFallbackNegotiated = false
@@ -528,6 +544,7 @@ class ExclusiveUsbOutput @Inject constructor(
                 startMediaTimeNeedsInit = true
                 mediaTimeBaseFrames = reuse.framesWritten
                 ensureVolumeObserverLocked()
+                pendingVolume = 1f
                 syncListeningGainLocked()
             }
             return true
@@ -688,6 +705,7 @@ class ExclusiveUsbOutput @Inject constructor(
         active = true
         lastFailureReason = null
         paused = false
+        pendingVolume = 1f
         startMediaTimeNeedsInit = true
         startMediaTimeUs = 0L
         mediaTimeBaseFrames = 0L
@@ -723,8 +741,9 @@ class ExclusiveUsbOutput @Inject constructor(
 
         synchronized(stateLock) {
             ensureVolumeObserverLocked()
+            rememberStreamGain(readStreamMusicGain())
             listeningGain = listeningGainForDac()
-            lastAppliedListening = Float.NaN
+            lastAppliedCombined = Float.NaN
             applyVolumeLocked()
         }
         Log.i(
@@ -834,14 +853,14 @@ class ExclusiveUsbOutput @Inject constructor(
         if (max <= 0) return null
         val now = SystemClock.elapsedRealtime()
         val vol = explicitVol ?: if (now - lastStreamGainReadMs < 1500L) {
-            // Round, not truncate: 0.95999f * 25 must stay step 24, not drift to 23.
-            kotlin.math.round(lastKnownStreamGain * max).toInt()
+            (lastKnownStreamGain * max).toInt()
         } else {
             lastStreamGainReadMs = now
             runCatching { manager.getStreamVolume(AudioManager.STREAM_MUSIC) }.getOrDefault(max)
         }
         val gain = vol.coerceIn(0, max).toFloat() / max
         lastKnownStreamGain = gain
+        rememberStreamGain(gain)
         return gain
     }
 
@@ -871,22 +890,24 @@ class ExclusiveUsbOutput @Inject constructor(
         applyVolumeLocked()
     }
 
-    /**
-     * Only the system listening level goes through the perceptual dB curve
-     * (on the Feature Unit when there is one). Media3 volume — app slider,
-     * ducks, fades — is a linear amplitude, as on AudioTrack, applied to PCM
-     * on top. Curving the product made two 50% sliders -40 dB instead of -31.
-     */
     private fun applyVolumeLocked() {
-        val listening = listeningGain.coerceIn(0f, 1f)
-        val unchanged = lastAppliedListening.isFinite() && kotlin.math.abs(listening - lastAppliedListening) < 1e-4f
-        lastAppliedListening = listening
-        if (hardwareVolume && !unchanged && featureVolume?.setNormalized(listening) != true) {
-            hardwareVolume = false
-            Log.w(TAG, "Feature Unit SET_CUR failed; falling back to perceptual software gain")
+        val combined = (listeningGain * pendingVolume).coerceIn(0f, 1f)
+        val unchanged = lastAppliedCombined.isFinite() && kotlin.math.abs(combined - lastAppliedCombined) < 1e-4f
+        if (hardwareVolume) {
+            softwareGainValue = 1f
+            if (!unchanged) {
+                val applied = featureVolume?.setNormalized(combined) == true
+                if (!applied) {
+                    hardwareVolume = false
+                    softwareGainValue = UacFeatureVolume.perceptualLinearGain(combined)
+                    Log.w(TAG, "Feature Unit SET_CUR failed; falling back to perceptual software gain")
+                }
+                lastAppliedCombined = combined
+            }
+        } else {
+            softwareGainValue = UacFeatureVolume.perceptualLinearGain(combined)
+            lastAppliedCombined = combined
         }
-        val app = pendingVolume.coerceIn(0f, 1f)
-        softwareGainValue = if (hardwareVolume) app else UacFeatureVolume.perceptualLinearGain(listening) * app
     }
 
     private fun startWriterLocked(target: UsbAudioStream) {
@@ -946,39 +967,13 @@ class ExclusiveUsbOutput @Inject constructor(
             writingInProgress = true
             lastWriteElapsedMs = SystemClock.elapsedRealtime()
             try {
-                writeScaled(target, next)
+                if (next.floats != null) target.write(next.floats)
+                else if (next.raw != null) target.writeRaw(next.raw, next.encoding)
             } finally {
                 writingInProgress = false
                 lastWriteElapsedMs = SystemClock.elapsedRealtime()
             }
         }
-    }
-
-    /** Writer thread only: applies the current software gain, then hands the chunk to USB. */
-    private fun writeScaled(target: UsbAudioStream, chunk: QueuedPcm) {
-        val gain = softwareGain()
-        val fromGain = lastPcmGain
-        lastPcmGain = gain
-        val channels = activeChannels
-        // ~10ms glide on volume changes (removes zipper noise); a steady
-        // gain takes exactly the previous constant-gain path.
-        val rampFrames = (configuredRateHz / 100).coerceAtLeast(1)
-        chunk.floats?.let { floats ->
-            ExclusivePcmGain.applyRamped(floats, fromGain, gain, channels, rampFrames)
-            target.write(floats)
-            return
-        }
-        val bytes = chunk.raw ?: return
-        val attenuate = gain >= 0f && (gain < 1f - 1e-6f || fromGain < 1f - 1e-6f)
-        if (attenuate && chunk.encoding == RAW_PCM16 && activeWireBits > 16) {
-            // Scale into 24 bits instead of back into 16: same level, no
-            // added quantization noise. The native layer passes 24-bit
-            // through (or pads it to a 32-bit alt) losslessly.
-            target.writeRaw(scalePcm16To24(bytes, fromGain, gain, channels, rampFrames), RAW_PCM24)
-            return
-        }
-        if (attenuate) scalePcmRamped(bytes, chunk.encoding, fromGain, gain, channels, rampFrames)
-        target.writeRaw(bytes, chunk.encoding)
     }
 
     private fun stopStreamLocked() {
@@ -1019,7 +1014,7 @@ class ExclusiveUsbOutput @Inject constructor(
             configuredRateHz = 0
             active = false
             softwareGainValue = 1f
-            lastAppliedListening = Float.NaN
+            lastAppliedCombined = Float.NaN
             startMediaTimeNeedsInit = true
             startMediaTimeUs = 0L
             mediaTimeBaseFrames = 0L

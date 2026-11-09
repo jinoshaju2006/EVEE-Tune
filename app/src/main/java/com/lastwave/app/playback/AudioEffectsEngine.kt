@@ -2,6 +2,7 @@ package com.lastwave.app.playback
 
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -16,6 +17,7 @@ import com.lastwave.app.data.local.SettingsPreferences
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.ln
+import kotlin.math.log10
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,10 +32,10 @@ import kotlinx.coroutines.sync.withLock
  * platform effects are released whenever native Float32 processing is active,
  * preventing doubled EQ, gain, or limiting.
  *
- * Loudness normalization (ReplayGain tags via [LoudnessNormalizer]) and the
- * Dolby/spatial makeup gain are applied here as a uniform input gain ahead of
- * the limiter. Both are bypassed whenever bit-perfect or USB-exclusive output
- * is active. Per-track feed contract for the player (read-only, no player
+ * Loudness normalization (ReplayGain tags via [LoudnessNormalizer]) is applied
+ * here as a uniform tone-stage offset on top of the EQ curve. It stays OFF by
+ * default and is bypassed whenever bit-perfect or USB-exclusive output is
+ * active. Per-track feed contract for the player (read-only, no player
  * restructuring required): on track change, call [setReplayGainFromFormat]
  * with the new track's ExoPlayer [Format] (or [setReplayGainTags] with tags
  * parsed from file metadata via [LoudnessNormalizer.parseFromMap]); when the
@@ -62,7 +64,6 @@ class AudioEffectsEngine @Inject constructor(
     @Volatile private var loudnessPreampDb = 0f
     @Volatile private var replayGainTags: ReplayGainTags? = null
     @Volatile private var loudnessGainDb = 0f
-    @Volatile private var spatialContent = false
 
     private var attachedSessionId = C.AUDIO_SESSION_ID_UNSET
     private var toneEffect: ToneEffect? = null
@@ -148,8 +149,17 @@ class AudioEffectsEngine @Inject constructor(
      */
     fun setReplayGainFromFormat(format: Format?) {
         val sampleMime = format?.sampleMimeType?.lowercase().orEmpty()
-        spatialContent = SPATIAL_MIME_MARKERS.any(sampleMime::contains)
-        setReplayGainTags(LoudnessNormalizer.parseFromFormat(format))
+        val isAtmos = sampleMime.contains("eac3") || sampleMime.contains("ec-3") ||
+            sampleMime.contains("ac-3") || sampleMime.contains("ac3")
+        val parsedTags = LoudnessNormalizer.parseFromFormat(format)
+        val finalTags = if (parsedTags == null && isAtmos) {
+            // Dolby Atmos masters target -27 to -31 LUFS (dialogue normalization).
+            // Provide +6 dB loudness compensation so Atmos tracks match stereo listening levels.
+            ReplayGainTags(trackGainDb = 6.0f, trackPeak = 0.89f)
+        } else {
+            parsedTags
+        }
+        setReplayGainTags(finalTags)
     }
 
     fun detach() {
@@ -174,16 +184,10 @@ class AudioEffectsEngine @Inject constructor(
         }
 
         val userEqEnabled = equalizerSettings.enabled
-        // Dolby/spatial decodes reach this path (multichannel skips the native
-        // DSP) mastered around -18 LKFS, far below stereo masters. The makeup
-        // is applied always, not only with normalization on.
-        val outputGainDb = (
-            (if (loudnessMode != LoudnessMode.OFF) loudnessGainDb else 0f) +
-                (if (spatialContent) SPATIAL_MAKEUP_GAIN_DB else 0f)
-            ).coerceIn(-LOUDNESS_GAIN_CLAMP_DB, LOUDNESS_GAIN_CLAMP_DB)
-        val needsTone = userEqEnabled || studioClarityEnabled || outputGainDb != 0f
+        val loudnessActive = loudnessMode != LoudnessMode.OFF && loudnessGainDb != 0f
+        val needsTone = userEqEnabled || studioClarityEnabled || loudnessActive
         if (needsTone) {
-            applyToneEffect(buildEqCurve(userEqEnabled), outputGainDb)
+            applyToneEffect(buildCombinedCurve(userEqEnabled, loudnessActive))
         } else {
             releaseToneInternal()
         }
@@ -200,7 +204,7 @@ class AudioEffectsEngine @Inject constructor(
         )
     }
 
-    private fun buildEqCurve(userEqEnabled: Boolean): FloatArray =
+    private fun buildCombinedCurve(userEqEnabled: Boolean, loudnessActive: Boolean): FloatArray =
         FloatArray(EQ_BAND_FREQS_HZ.size) { index ->
             val studioGain = if (studioClarityEnabled) {
                 EqualizerPresets.STUDIO_MASTER.gainsDb.getOrElse(index) { 0f }
@@ -209,29 +213,34 @@ class AudioEffectsEngine @Inject constructor(
                 equalizerSettings.gainsDb.getOrElse(index) { 0f }
             } else 0f
             val combined = studioGain + userGain
-            if (combined.isFinite()) combined.coerceIn(-EQ_MAX_GAIN_DB, EQ_MAX_GAIN_DB) else 0f
+            val base = if (combined.isFinite()) combined.coerceIn(-EQ_MAX_GAIN_DB, EQ_MAX_GAIN_DB) else 0f
+            if (!loudnessActive || loudnessGainDb == 0f) {
+                base
+            } else {
+                val total = base + loudnessGainDb
+                if (total.isFinite()) {
+                    total.coerceIn(-LOUDNESS_STAGE_MAX_GAIN_DB, LOUDNESS_STAGE_MAX_GAIN_DB)
+                } else {
+                    base
+                }
+            }
         }
 
-    /**
-     * [outputGainDb] is a uniform level change. It must stay out of the EQ
-     * curve: the curve's boost-headroom subtraction cancelled all but 1 dB of
-     * a uniform boost, so the old +6 dB Atmos makeup arrived as +1 dB.
-     */
-    private fun applyToneEffect(gainsDb: FloatArray, outputGainDb: Float) {
+    private fun applyToneEffect(gainsDb: FloatArray) {
         var effect = toneEffect
         if (effect == null || !effect.hasControl()) {
             releaseToneInternal()
             effect = createToneEffect(attachedSessionId)
             toneEffect = effect
         }
-        if (effect?.apply(gainsDb, outputGainDb) == true) return
+        if (effect?.apply(gainsDb) == true) return
 
         if (effect is ModernDynamicsEffect) {
             Log.w(TAG, "DynamicsProcessing rejected this device; using legacy Equalizer")
             releaseToneInternal()
             val legacy = LegacyEqualizerEffect.create(attachedSessionId)
             toneEffect = legacy
-            if (legacy?.apply(gainsDb, outputGainDb) != true) {
+            if (legacy?.apply(gainsDb) != true) {
                 Log.w(TAG, "Platform Equalizer is unavailable on this audio route")
                 releaseToneInternal()
             }
@@ -259,7 +268,7 @@ class AudioEffectsEngine @Inject constructor(
 
     private interface ToneEffect {
         fun hasControl(): Boolean
-        fun apply(gainsDb: FloatArray, outputGainDb: Float): Boolean
+        fun apply(gainsDb: FloatArray): Boolean
         fun release()
     }
 
@@ -269,9 +278,9 @@ class AudioEffectsEngine @Inject constructor(
     ) : ToneEffect {
         override fun hasControl(): Boolean = runCatching { processor.hasControl() }.getOrDefault(false)
 
-        override fun apply(gainsDb: FloatArray, outputGainDb: Float): Boolean = runCatching {
-            // The -1 dBFS limiter below catches the peaks a positive gain pushes over.
-            processor.setInputGainAllChannelsTo(calculateHeadroomDb(gainsDb) + outputGainDb)
+        override fun apply(gainsDb: FloatArray): Boolean = runCatching {
+            val headroomDb = calculateHeadroomDb(gainsDb)
+            processor.setInputGainAllChannelsTo(headroomDb)
             val preEq = DynamicsProcessing.Eq(true, true, EQ_BAND_FREQS_HZ.size)
             EQ_BAND_FREQS_HZ.forEachIndexed { index, frequency ->
                 preEq.setBand(
@@ -325,11 +334,11 @@ class AudioEffectsEngine @Inject constructor(
     ) : ToneEffect {
         override fun hasControl(): Boolean = runCatching { equalizer.hasControl() }.getOrDefault(false)
 
-        override fun apply(gainsDb: FloatArray, outputGainDb: Float): Boolean = runCatching {
+        override fun apply(gainsDb: FloatArray): Boolean = runCatching {
             val range = equalizer.bandLevelRange
             val minimumMb = range.first().toInt()
             val maximumMb = range.last().toInt()
-            val headroomDb = calculateHeadroomDb(gainsDb) + outputGainDb
+            val headroomDb = calculateHeadroomDb(gainsDb)
             for (band in 0 until equalizer.numberOfBands.toInt()) {
                 val centerHz = equalizer.getCenterFreq(band.toShort()) / MILLIHERTZ_PER_HZ
                 val gainDb = interpolateCurve(centerHz, gainsDb) + headroomDb
@@ -358,10 +367,13 @@ class AudioEffectsEngine @Inject constructor(
         const val EFFECT_PRIORITY = 0
         const val MILLIHERTZ_PER_HZ = 1_000
         const val MILLIBELS_PER_DB = 100f
+        const val MIN_BOOST_PERCENT = 100
+        const val MAX_BOOST_PERCENT = 200
+        const val MAX_BOOST_MILLIBELS = 602
         const val MAX_PRE_LIMITER_BOOST_DB = 1.0f
-        /** Lifts ~-18 LKFS Atmos music toward the level of stereo masters. */
-        const val SPATIAL_MAKEUP_GAIN_DB = 6f
-        val SPATIAL_MIME_MARKERS = listOf("eac3", "ec-3", "ac-3", "ac3", "ac4", "mha1", "mhm1")
+        // Platform-safe per-band ceiling once the uniform loudness offset is
+        // added on top of the EQ curve.
+        const val LOUDNESS_STAGE_MAX_GAIN_DB = 15f
 
         fun calculateHeadroomDb(gainsDb: FloatArray): Float {
             val maximumBoost = (gainsDb.maxOrNull() ?: 0f).coerceAtLeast(0f)

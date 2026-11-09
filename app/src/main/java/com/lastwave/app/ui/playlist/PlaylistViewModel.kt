@@ -18,8 +18,6 @@ import com.lastwave.app.util.FileExportHelper
 import com.lastwave.app.util.PlaylistExportFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +86,7 @@ class PlaylistViewModel @Inject constructor(
     private val ytMusicSyncManager: com.lastwave.app.data.ytmusic.YtMusicSyncManager,
     private val ytMusicLibraryManager: com.lastwave.app.data.ytmusic.YtMusicLibraryManager,
     private val trackDownloadManager: com.lastwave.app.data.download.TrackDownloadManager,
+    private val innerTubeApi: com.lastwave.app.data.music.InnerTubeMusicApi,
     private val routeNavigator: com.lastwave.app.ui.navigation.AppRouteNavigator,
     private val localMusicLibrary: com.lastwave.app.data.localmusic.LocalMusicLibrary,
     private val spotifyPlaylistImporter: SpotifyPlaylistImporter,
@@ -548,64 +547,47 @@ class PlaylistViewModel @Inject constructor(
     fun confirmDelete() {
         val id = _uiState.value.deleteConfirmForPlaylistId ?: return
         viewModelScope.launch {
-            val deleted = withContext(NonCancellable) { deletePlaylist(id) }
-            if (id >= 0L) localMusicLibrary.cleanupOrphansAsync()
-
-            if (deleted) {
-                _uiState.update { state ->
-                    state.copy(
-                        deleteConfirmForPlaylistId = null,
-                        playlists = state.playlists.filterNot { it.id == id },
-                        detailPlaylist = state.detailPlaylist?.takeUnless { it.id == id },
-                        toastMessage = "Playlist deleted",
-                    )
-                }
-                if (id >= 0L) load()
-            } else {
-                _uiState.update {
-                    it.copy(
-                        deleteConfirmForPlaylistId = null,
-                        toastMessage = "Couldn't delete playlist. Try again.",
-                    )
+            val playlist = _uiState.value.playlists.find { it.id == id }
+            if (playlist != null) {
+                val ytId = playlist.remotePlaylistId
+                if (ytId != null) {
+                    try {
+                        val actualId = if (ytId.startsWith("VL")) ytId.drop(2) else ytId
+                        innerTubeApi.deleteRemotePlaylist(actualId)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
+            if (id >= 0L) {
+                playlistRepository.delete(id)
+                localMusicLibrary.cleanupOrphansAsync()
+            }
+            _uiState.update { it.copy(deleteConfirmForPlaylistId = null) }
+            load()
         }
-    }
-
-    /**
-     * Local playlists are deleted from Room (their YouTube mirror follows via
-     * the sync's orphan sweep); connected-account playlists (negative ids) via
-     * the library manager. Returns whether it is gone.
-     *
-     * Callers run this under NonCancellable: the detail screen calls
-     * confirmDelete() and pops itself at once, clearing this ViewModel, while
-     * the delete still waits on the repository's startup sync and the network.
-     */
-    private suspend fun deletePlaylist(id: Long): Boolean = try {
-        if (id < 0L) ytMusicLibraryManager.deleteLibraryPlaylist(id) else playlistRepository.delete(id).let { true }
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: Exception) {
-        android.util.Log.e("PlaylistViewModel", "Couldn't delete playlist $id", error)
-        false
     }
 
     fun deleteMultiple(ids: Set<Long>) {
         viewModelScope.launch {
-            val deletedIds = withContext(NonCancellable) { ids.filterTo(mutableSetOf()) { deletePlaylist(it) } }
-            val failed = ids.size - deletedIds.size
-            localMusicLibrary.cleanupOrphansAsync()
-            _uiState.update { state ->
-                state.copy(
-                    playlists = state.playlists.filterNot { it.id in deletedIds },
-                    detailPlaylist = state.detailPlaylist?.takeUnless { it.id in deletedIds },
-                    toastMessage = when {
-                        failed > 0 -> "Couldn't delete $failed playlist${if (failed == 1) "" else "s"}. Try again."
-                        deletedIds.isNotEmpty() -> "Deleted ${deletedIds.size} playlist${if (deletedIds.size == 1) "" else "s"}"
-                        else -> state.toastMessage
-                    },
-                )
+            for (id in ids) {
+                val playlist = _uiState.value.playlists.find { it.id == id }
+                if (playlist != null) {
+                    val ytId = playlist.remotePlaylistId
+                    if (ytId != null) {
+                        try {
+                            val actualId = if (ytId.startsWith("VL")) ytId.drop(2) else ytId
+                            innerTubeApi.deleteRemotePlaylist(actualId)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+                if (id >= 0L) {
+                    playlistRepository.delete(id)
+                }
             }
+            localMusicLibrary.cleanupOrphansAsync()
             load()
         }
     }

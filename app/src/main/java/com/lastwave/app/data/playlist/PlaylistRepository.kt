@@ -64,23 +64,21 @@ val SavedPlaylist.isYouTubeOnly: Boolean
 private const val MAX_SAVED_PLAYLISTS = 20
 private const val STARTUP_SYNC_WAIT_MS = 2_000L
 private const val TAG = "PlaylistRepository"
+    const val LIKED_SONGS_MODE = "liked"
 
-const val LIKED_SONGS_MODE = "liked"
+    /**
+     * This app's own liked list.
+     *
+     * Named apart from YouTube Music's "Liked Music" so the two are never confused: they
+     * hold the same songs, and each of them can be switched off on its own.
+     */
+    const val LIKED_SONGS_TITLE = "Liked Songs"
 
-/**
- * This app's own liked list.
- *
- * Named apart from YouTube Music's "Liked Music" so the two are never confused: they
- * hold the same songs, and each of them can be switched off on its own.
- */
-const val LIKED_SONGS_TITLE = "Liked Songs"
+    /** YouTube Music's own liked list. */
+    const val LIKED_YT_SONGS_TITLE = "Liked Yt Song"
 
-/** YouTube Music's own liked list. */
-const val LIKED_YT_SONGS_TITLE = "Liked Yt Song"
-
-/** What this app's liked list was called before it was renamed. */
-const val LEGACY_LIKED_SONGS_TITLE = "Liked Local Song"
-
+    /** What this app's liked list was called before it was renamed. */
+    const val LEGACY_LIKED_SONGS_TITLE = "Liked Local Song"
 /** Built-in playlist holding audio files imported from the device. */
 const val LOCAL_SONGS_MODE = "local"
 const val LOCAL_SONGS_TITLE = "Local songs"
@@ -171,12 +169,8 @@ class PlaylistRepository @Inject constructor(
                     val pinned = domain.tracks.pinnedWithVideoIdsPreserving(innerTube)
                     val hasNewPins = pinned.zip(domain.tracks).any { (newTrack, oldTrack) -> newTrack.url != oldTrack.url }
                     if (!hasNewPins) continue
-                    // Compare-and-swap: resolving ids takes seconds to minutes, and a
-                    // blind upsert of this old snapshot wiped likes and adds made
-                    // meanwhile. A row that changed is skipped (retried next launch).
-                    if (dao.updateTracksIfUnchanged(entity.id, entity.tracksJson, entity.withTracks(pinned).tracksJson) > 0) {
-                        changed = true
-                    }
+                    dao.upsert(entity.copy(tracksJson = json.encodeToString(pinned.map { it.toStored() })))
+                    changed = true
                 }
                 if (changed) _changes.tryEmit(Unit)
             } catch (error: CancellationException) {
@@ -201,13 +195,36 @@ class PlaylistRepository @Inject constructor(
             // Transient failure (e.g. a sync write holding the database lock,
             // a settling migration): retry the live read once before giving
             // up on it.
-            readAllOrNull("Playlist read retry failed")?.let { return it.toDomainSorted() }
+            val retried = try {
+                dao.getAll()
+            } catch (retryError: CancellationException) {
+                throw retryError
+            } catch (retryError: Exception) {
+                Log.w(TAG, "Playlist read retry failed", retryError)
+                null
+            }
+            if (retried != null) return retried.toDomainSorted()
             // Only a genuinely empty database may be repopulated from the
             // public mirror — that is exactly what restoreIfDatabaseEmpty()
             // checks. A non-empty database means the read itself failed.
-            val restored = orNull("Public mirror restore check failed") { publicMirror.restoreIfDatabaseEmpty() } ?: 0
+            val restored = try {
+                publicMirror.restoreIfDatabaseEmpty()
+            } catch (restoreError: CancellationException) {
+                throw restoreError
+            } catch (restoreError: Exception) {
+                Log.w(TAG, "Public mirror restore check failed", restoreError)
+                0
+            }
             if (restored > 0) {
-                readAllOrNull("Playlist read after mirror restore failed")?.let { return it.toDomainSorted() }
+                val recovered = try {
+                    dao.getAll()
+                } catch (recoveredError: CancellationException) {
+                    throw recoveredError
+                } catch (recoveredError: Exception) {
+                    Log.w(TAG, "Playlist read after mirror restore failed", recoveredError)
+                    null
+                }
+                if (recovered != null) return recovered.toDomainSorted()
             }
             // Never substitute the public mirror snapshot for a failed read.
             // That file lags behind Room, and callers treat this list as
@@ -220,19 +237,6 @@ class PlaylistRepository @Inject constructor(
             throw error
         }
     }
-
-    /** Runs [block]; a failure (never a cancellation) is logged as [failureLog] and becomes null. */
-    private inline fun <T> orNull(failureLog: String, block: () -> T): T? = try {
-        block()
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
-        Log.w(TAG, failureLog, error)
-        null
-    }
-
-    private suspend fun readAllOrNull(failureLog: String): List<SavedPlaylistEntity>? =
-        orNull(failureLog) { dao.getAll() }
 
     private fun List<SavedPlaylistEntity>.toDomainSorted(): List<SavedPlaylist> =
         mapNotNull { entity ->
@@ -284,9 +288,12 @@ class PlaylistRepository @Inject constructor(
         // re-import, progressive album save): suffix instead of stacking an
         // identical-titled sibling that reads as a duplication bug.
         var finalTitle = title
-        var counter = 2
-        while (existing.any { it.mode == mode && it.title.equals(finalTitle, ignoreCase = true) }) {
-            finalTitle = "$title ${counter++}"
+        if (existing.any { it.mode == mode && it.title.equals(finalTitle, ignoreCase = true) }) {
+            var counter = 2
+            while (existing.any { it.mode == mode && it.title.equals(finalTitle, ignoreCase = true) }) {
+                finalTitle = "$title $counter"
+                counter++
+            }
         }
 
         val entity = SavedPlaylistEntity(
@@ -365,21 +372,33 @@ class PlaylistRepository @Inject constructor(
             return entity.toDomain()
         }
         if (cleanTitle.isBlank()) return entity.toDomain()
-        return persist(entity.copy(title = cleanTitle))
+        val updated = entity.copy(title = cleanTitle)
+        dao.upsert(updated)
+        syncPublicMirror()
+        _changes.tryEmit(Unit)
+        return updated.toDomain()
     }
 
     suspend fun setCustomCover(id: Long, uri: String?): SavedPlaylist? {
         awaitStartupSync()
         val entity = dao.getById(id) ?: return null
         val cleanUri = uri?.trim()?.takeIf { it.isNotBlank() }
-        return persist(entity.copy(customCoverUri = cleanUri))
+        val updated = entity.copy(customCoverUri = cleanUri)
+        dao.upsert(updated)
+        syncPublicMirror()
+        _changes.tryEmit(Unit)
+        return updated.toDomain()
     }
 
     suspend fun setPinned(id: Long, pinned: Boolean): SavedPlaylist? {
         awaitStartupSync()
         val entity = dao.getById(id) ?: return null
         if (entity.isPinned == pinned) return entity.toDomain()
-        return persist(entity.copy(isPinned = pinned))
+        val updated = entity.copy(isPinned = pinned)
+        dao.upsert(updated)
+        syncPublicMirror()
+        _changes.tryEmit(Unit)
+        return updated.toDomain()
     }
 
     /**
@@ -414,7 +433,12 @@ class PlaylistRepository @Inject constructor(
             } else {
                 track
             }
-            persist(entity.withTracks(playlist.tracks + trackToAdd))
+            val updatedTracksJson = json.encodeToString((playlist.tracks + trackToAdd).map { it.toStored() })
+            val updated = entity.copy(tracksJson = updatedTracksJson)
+            dao.upsert(updated)
+            syncPublicMirror()
+            _changes.tryEmit(Unit)
+            updated.toDomain()
         }
     }
 
@@ -424,7 +448,12 @@ class PlaylistRepository @Inject constructor(
             val entity = dao.getById(id) ?: return@withLock null
             val playlist = entity.toDomain()
             if (index !in playlist.tracks.indices) return@withLock playlist
-            persist(entity.withTracks(playlist.tracks.toMutableList().apply { removeAt(index) }))
+            val updatedTracks = playlist.tracks.toMutableList().apply { removeAt(index) }
+            val updated = entity.copy(tracksJson = json.encodeToString(updatedTracks.map { it.toStored() }))
+            dao.upsert(updated)
+            syncPublicMirror()
+            _changes.tryEmit(Unit)
+            updated.toDomain()
         }
     }
 
@@ -442,7 +471,14 @@ class PlaylistRepository @Inject constructor(
             val entity = dao.getById(id) ?: return@withLock null
             val playlist = entity.toDomain()
             if (fromIndex !in playlist.tracks.indices || toIndex !in playlist.tracks.indices) return@withLock playlist
-            persist(entity.withTracks(playlist.tracks.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }))
+            val updatedTracks = playlist.tracks.toMutableList().apply {
+                add(toIndex, removeAt(fromIndex))
+            }
+            val updated = entity.copy(tracksJson = json.encodeToString(updatedTracks.map { it.toStored() }))
+            dao.upsert(updated)
+            syncPublicMirror()
+            _changes.tryEmit(Unit)
+            updated.toDomain()
         }
     }
 
@@ -492,7 +528,11 @@ class PlaylistRepository @Inject constructor(
             }
 
             if (merged == current) return@withLock entity.toDomain()
-            persist(entity.withTracks(merged))
+            val updated = entity.copy(tracksJson = json.encodeToString(merged.map { it.toStored() }))
+            dao.upsert(updated)
+            syncPublicMirror()
+            _changes.tryEmit(Unit)
+            updated.toDomain()
         }
     }
 
@@ -507,20 +547,28 @@ class PlaylistRepository @Inject constructor(
             // leaving a second list behind.
             if (existing.title.equals(LIKED_SONGS_TITLE, ignoreCase = true)) return@withLock existing
             val entity = dao.getById(existing.id)
-            if (entity != null) return@withLock persist(entity.copy(title = LIKED_SONGS_TITLE))
+            if (entity != null) {
+                val renamed = entity.copy(title = LIKED_SONGS_TITLE)
+                dao.upsert(renamed)
+                syncPublicMirror()
+                _changes.tryEmit(Unit)
+                return@withLock renamed.toDomain()
+            }
             return@withLock existing
         }
         getAll().firstOrNull { it.title.equals(LEGACY_LIKED_SONGS_TITLE, ignoreCase = true) }?.let { legacy ->
             val entity = dao.getById(legacy.id)
             if (entity != null) {
-                return@withLock persist(
-                    entity.copy(
-                        title = LIKED_SONGS_TITLE,
-                        subtitle = "Songs you like in LastWave",
-                        mode = LIKED_SONGS_MODE,
-                        isPinned = true,
-                    ),
+                val adopted = entity.copy(
+                    title = LIKED_SONGS_TITLE,
+                    subtitle = "Songs you like in LastWave",
+                    mode = LIKED_SONGS_MODE,
+                    isPinned = true,
                 )
+                dao.upsert(adopted)
+                syncPublicMirror()
+                _changes.tryEmit(Unit)
+                return@withLock adopted.toDomain()
             }
         }
         val created = save(
@@ -541,9 +589,10 @@ class PlaylistRepository @Inject constructor(
         awaitStartupSync()
         val entity = dao.getById(id) ?: return null
         if (expectedTracks != null && entity.toDomain().tracks != expectedTracks) return null
-        val updated = entity.withTracks(tracks)
+        val updated = entity.copy(tracksJson = json.encodeToString(tracks.map { it.toStored() }))
         if (dao.updateTracksIfUnchanged(id, entity.tracksJson, updated.tracksJson) == 0) return null
-        notifyChanged()
+        syncPublicMirror()
+        _changes.tryEmit(Unit)
         return updated.toDomain()
     }
 
@@ -586,13 +635,15 @@ class PlaylistRepository @Inject constructor(
     suspend fun delete(id: Long) {
         awaitStartupSync()
         dao.deleteById(id)
-        notifyChanged()
+        syncPublicMirror()
+        _changes.tryEmit(Unit)
     }
 
     suspend fun clearAll() {
         awaitStartupSync()
         dao.clear()
-        notifyChanged()
+        syncPublicMirror()
+        _changes.tryEmit(Unit)
     }
 
     fun publicMirrorPlaylistCount(content: String): Int? = publicMirror.playlistCount(content)
@@ -612,21 +663,6 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun findByDiscoverSignature(signature: String): SavedPlaylist? =
         getAll().firstOrNull { it.discoverSignature == signature }
-
-    /** Writes [updated] and publishes it (JSON mirror + change event). */
-    private suspend fun persist(updated: SavedPlaylistEntity): SavedPlaylist {
-        dao.upsert(updated)
-        notifyChanged()
-        return updated.toDomain()
-    }
-
-    private suspend fun notifyChanged() {
-        syncPublicMirror()
-        _changes.tryEmit(Unit)
-    }
-
-    private fun SavedPlaylistEntity.withTracks(tracks: List<GeneratedTrack>): SavedPlaylistEntity =
-        copy(tracksJson = json.encodeToString(tracks.map { it.toStored() }))
 
     private suspend fun syncPublicMirror() {
         publicMirror.writeFromDatabase().onFailure { e ->

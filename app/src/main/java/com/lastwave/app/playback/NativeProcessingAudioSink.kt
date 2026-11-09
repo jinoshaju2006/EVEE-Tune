@@ -42,8 +42,6 @@ class NativeProcessingAudioSink(
     private val exclusiveUsb: ExclusiveUsbOutput? = null,
     /** Fork: AAudio exclusive (MMAP) output on the phone's own outputs. */
     private val internalDirect: InternalDirectOutput? = null,
-    /** Loudness normalization; only touches the processed (non-bit-perfect) output. */
-    private val loudness: LoudnessStage? = null,
 ) : AudioSink {
     private var activeDelegate: DefaultAudioSink = fallbackDelegate
     // Read on the main thread for the signal-path verdict, written on the
@@ -195,7 +193,6 @@ class NativeProcessingAudioSink(
     }
 
     override fun configure(format: Format, specifiedBufferSize: Int, outputChannels: IntArray?) {
-        loudness?.beginTrack(format)
         if (canReuseNativeProcessing(format, outputChannels)) {
             configuredFormat = format
             configuredBufferSize = specifiedBufferSize
@@ -696,10 +693,11 @@ class NativeProcessingAudioSink(
                 C.ENCODING_PCM_16BIT -> {
                     var pos = startPos
                     while (pos + 1 < endPos) {
-                        // Linear like the other encodings: the old tanh "soft clip"
-                        // cost ~0.4 dB everywhere and up to 2.2 dB on peaks.
-                        val scaled = kotlin.math.round(buffer.getShort(pos) * gain).toInt()
-                        buffer.putShort(pos, scaled.coerceIn(-32768, 32767).toShort())
+                        val sample = buffer.getShort(pos).toInt()
+                        val rawFloat = (sample / 32768f) * gain
+                        val s = kotlin.math.tanh(rawFloat * 0.85f) * 1.12f
+                        val pcm = (s * 32767f).toInt().coerceIn(-32767, 32767).toShort()
+                        buffer.putShort(pos, pcm)
                         pos += 2
                     }
                 }
@@ -752,7 +750,6 @@ class NativeProcessingAudioSink(
             processor.queueInput(buffer.duplicate())
             pendingInputLimit = buffer.limit()
             val output = processor.getOutput()
-            applyLoudness(output)
             pendingOutput = output
             pendingPresentationTimeUs = presentationTimeUs
             pendingAccessUnitCount = encodedAccessUnitCount
@@ -775,12 +772,6 @@ class NativeProcessingAudioSink(
         return true
     }
 
-    private fun applyLoudness(output: ByteBuffer) {
-        // Bit-Perfect promises an untouched signal even on its compat path.
-        if (bitPerfectRequested) return
-        loudness?.process(output, outputChannelCount, processor.nativeOutputSampleRate)
-    }
-
     override fun playToEndOfStream() {
         if (usbExclusive) {
             if (exclusiveConvertSourceHz > 0) drainExclusiveConverterTail()
@@ -799,7 +790,7 @@ class NativeProcessingAudioSink(
         try {
             if (!endOfStreamQueued) {
                 processor.queueEndOfStream()
-                endOfStreamOutput = processor.getOutput().also(this::applyLoudness)
+                endOfStreamOutput = processor.getOutput()
                 endOfStreamQueued = true
             }
             val tail = endOfStreamOutput

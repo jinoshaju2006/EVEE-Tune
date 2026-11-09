@@ -18,6 +18,4 @@
     <locale android:name="ja" />
     <locale android:name="ko" />
     <locale android:name="ar" />
-    <!-- Wave 3 -->
-    <locale android:name="vi" />
 </locale-config>
