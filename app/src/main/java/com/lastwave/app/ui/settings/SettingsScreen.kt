@@ -2286,64 +2286,41 @@ fun SettingsScreen(
                         item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionLabel(stringResource(R.string.settings_section_about))
-                    SettingsGroup(rowCount = 4) { index, position ->
-                        when (index) {
-                            0 -> SettingsActionCard(
-                                icon = Icons.AutoMirrored.Filled.Send,
-                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                title = stringResource(R.string.settings_updates_support),
-                                subtitle = stringResource(R.string.set_tg_sub),
-                                onClick = {
-                                    if (!openTelegramChannel(context, "clashprojects")) {
-                                        viewModel.showToast(context.getString(R.string.toast_no_browser_tg))
-                                    }
-                                },
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "about.telegram_support"),
-                            )
-                            1 -> SettingsActionCard(
-                                icon = Icons.Filled.Group,
-                                iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                title = stringResource(R.string.set_discord_support),
-                                subtitle = stringResource(R.string.set_discord_support_sub),
-                                onClick = {
-                                    val discordIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/TMCEPSUNk2"))
-                                    if (!startActivitySafely(context, discordIntent)) {
-                                        viewModel.showToast(context.getString(R.string.toast_no_browser))
-                                    }
-                                },
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "about.discord_support"),
-                            )
-                            2 -> SettingsActionCard(
-                                icon = Icons.Filled.AutoAwesome,
-                                iconContainer = MaterialTheme.colorScheme.primaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                title = stringResource(R.string.settings_more_from_us),
-                                subtitle = stringResource(R.string.set_more_apps_sub),
-                                onClick = {
-                                    if (!openTelegramChannel(context, "MaterialYouApp")) {
-                                        viewModel.showToast(context.getString(R.string.toast_no_browser_tg))
-                                    }
-                                },
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "about.more_apps"),
-                            )
-                            3 -> SettingsActionCard(
-                                icon = Icons.Filled.Code,
-                                iconContainer = MaterialTheme.colorScheme.secondaryContainer,
-                                iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                title = stringResource(R.string.settings_diagnostics),
-                                subtitle = stringResource(R.string.settings_diagnostics_sub),
-                                onClick = { viewModel.exportDiagnostics() },
-                                position = position,
-                                isHighlighted = (highlightedSettingId == "about.diagnostics"),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
+                    SettingsGroup(rowCount = 2) { index, position ->
+                when (index) {
+                    0 -> SettingsActionCard(
+                        icon = Icons.Filled.Code,
+                        iconContainer = MaterialTheme.colorScheme.primaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        title = "Developed By EVO",
+                        subtitle = "Instagram: https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA==",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/e.v_.o?mdxt=MTZvZGg2a2R6cmx5dA=="))
+                            if (!startActivitySafely(context, intent)) {
+                                viewModel.showToast(context.getString(R.string.toast_no_browser))
+                            }
+                        },
+                        position = position,
+                        isHighlighted = (highlightedSettingId == "about.developer"),
+                    )
+                    1 -> SettingsActionCard(
+                        icon = Icons.AutoMirrored.Filled.Send,
+                        iconContainer = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        title = "Connect directly for reporting bugs and any other issues",
+                        subtitle = "jinomattathil@gmail.com",
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:jinomattathil@gmail.com"))
+                            if (!startActivitySafely(context, intent)) {
+                                viewModel.showToast(context.getString(R.string.toast_no_browser))
+                            }
+                        },
+                        position = position,
+                        isHighlighted = (highlightedSettingId == "about.contact"),
+                    )
+                }
+            }
+                        Spacer(Modifier.height(4.dp))
 
                     // Prominent Update Available Banner Card (if newer version detected)
                     if (updateInfo.isUpdateAvailable) {
@@ -5336,13 +5313,13 @@ private fun AboutCard(
             ) {
                 Icon(
                     painter = painterResource(appIcon.logoRes),
-                    contentDescription = "LastWave",
+                    contentDescription = "EVEE Tune",
                     tint = Color.Unspecified,
                     modifier = Modifier.size(72.dp),
                 )
             }
             Spacer(Modifier.height(14.dp))
-            Text("LastWave", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("EVEE Tune", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Surface(
                 shape = ExpressivePillShape,
