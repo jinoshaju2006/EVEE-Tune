@@ -151,7 +151,7 @@ jobs:
                               )
                           }
                       }
-'''
+              '''
               screen = screen[:group_start] + replacement + screen[group_end:]
               screen = screen.replace('contentDescription = "LastWave"', 'contentDescription = "EVEE Tune"')
               screen = screen.replace('Text("LastWave", style = MaterialTheme.typography.headlineSmall', 'Text("EVEE Tune", style = MaterialTheme.typography.headlineSmall')
