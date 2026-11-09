@@ -5312,7 +5312,7 @@ private fun AboutCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    painter = painterResource(appIcon.logoRes),
+                    painter = painterResource(R.drawable.evee_icon),
                     contentDescription = "EVEE Tune",
                     tint = Color.Unspecified,
                     modifier = Modifier.size(72.dp),
