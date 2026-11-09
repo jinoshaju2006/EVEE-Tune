@@ -98,8 +98,8 @@ jobs:
           # Keep the About screen's developer credit explicit in the default locale.
           strings = strings_file.read_text(encoding="utf-8")
           strings, about_count = re.subn(
-              r'(<string\\s+name="about_made_by"[^>]*>).*?(</string>)',
-              r'\\1Made by EVO\\2',
+              r'(<string\s+name="about_made_by"[^>]*>).*?(</string>)',
+              r'\1Made by EVO\2',
               strings,
               count=1,
               flags=re.DOTALL,
