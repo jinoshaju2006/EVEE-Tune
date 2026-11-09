@@ -1,0 +1,126 @@
+name: Import EVEE Tune Android source
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/import-upstream.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: evee-tune-source-import
+  cancel-in-progress: false
+
+jobs:
+  import-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out EVEE Tune
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        run: |
+          sdkmanager "platforms;android-37" "cmake;3.22.1" "ndk;27.2.12479018"
+
+      - name: Download upstream source
+        run: |
+          git clone --depth 1 https://github.com/Clash-Projects/LastWave-Native.git /tmp/lastwave-upstream
+
+      - name: Import source and apply EVEE Tune identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --exclude='.git/' --exclude='.github/' --exclude='README.md' /tmp/lastwave-upstream/ ./
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_file = Path("app/build.gradle.kts")
+          gradle = gradle_file.read_text(encoding="utf-8")
+          old = 'applicationId = if (vivoOrigin) "com.tencent.qqmusic" else "com.lastwave.app"'
+          new = 'applicationId = if (vivoOrigin) "com.tencent.qqmusic" else "com.evee.tune"'
+          if old not in gradle:
+              raise SystemExit("Could not find the expected upstream applicationId line; stopping without committing.")
+          gradle_file.write_text(gradle.replace(old, new, 1), encoding="utf-8")
+
+          settings_file = Path("settings.gradle.kts")
+          if settings_file.exists():
+              settings = settings_file.read_text(encoding="utf-8")
+              settings_file.write_text(settings.replace('rootProject.name = "LastWave"', 'rootProject.name = "EVEE Tune"'), encoding="utf-8")
+
+          strings_file = Path("app/src/main/res/values/strings.xml")
+          strings = strings_file.read_text(encoding="utf-8")
+          strings, count = re.subn(
+              r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+              r'\1EVEE Tune\2',
+              strings,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if count != 1:
+              raise SystemExit("Could not update the launcher app label; stopping without committing.")
+          strings_file.write_text(strings, encoding="utf-8")
+          PY
+
+          cat > README.md <<'EOF'
+          # EVEE Tune
+
+          EVEE Tune is an independent Android app rebrand based on [LastWave Native](https://github.com/Clash-Projects/LastWave-Native).
+
+          ## Current build identity
+          - App label: **EVEE Tune**
+          - Android application ID: `com.evee.tune`
+          - Upstream code namespace: `com.lastwave.app` (kept internally to avoid breaking upstream component references)
+          - Upstream baseline: latest `main` branch at import time
+          - Build: GitHub Actions debug APK
+
+          ## Build
+          Open **Actions → Import EVEE Tune Android source → Run workflow**. The workflow imports the upstream Android source, applies the EVEE Tune app label and application ID, commits the source, and attempts a debug APK build. The APK is uploaded as an Actions artifact when the build succeeds.
+
+          For a local build, use Android Studio with JDK 17 and Android SDK 37, then run:
+
+          ```bash
+          ./gradlew :app:assembleDebug
+          ```
+
+          ## Attribution and license
+          This project is based on LastWave Native by its upstream contributors. Upstream copyright notices and the GPL-3.0 license are preserved in this repository. See [LICENSE](LICENSE) and the [upstream repository](https://github.com/Clash-Projects/LastWave-Native).
+
+          EVEE Tune is independent and is not affiliated with or endorsed by the upstream developers or any music service. All third-party names and trademarks belong to their respective owners.
+          EOF
+
+      - name: Commit imported source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import LastWave Native source and rebrand as EVEE Tune"
+          git push origin HEAD
+
+      - name: Build EVEE Tune debug APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EVEE-Tune-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
