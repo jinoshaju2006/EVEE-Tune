@@ -86,6 +86,27 @@ jobs:
           if count != 1:
               raise SystemExit("Could not update the launcher app label; stopping without committing.")
           strings_file.write_text(strings, encoding="utf-8")
+
+          # Rebrand user-visible strings across default and translated resources.
+          for resource_file in Path("app/src/main/res").glob("values*/strings.xml"):
+              resource_text = resource_file.read_text(encoding="utf-8")
+              resource_text = resource_text.replace("Made by LastWave Team", "Made by EVO")
+              resource_text = resource_text.replace("LastWave Team", "EVO")
+              resource_text = resource_text.replace("LastWave", "EVEE Tune")
+              resource_file.write_text(resource_text, encoding="utf-8")
+
+          # Keep the About screen's developer credit explicit in the default locale.
+          strings = strings_file.read_text(encoding="utf-8")
+          strings, about_count = re.subn(
+              r'(<string\\s+name="about_made_by"[^>]*>).*?(</string>)',
+              r'\\1Made by EVO\\2',
+              strings,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if about_count != 1:
+              raise SystemExit("Could not set the EVEE Tune developer credit; stopping without committing.")
+          strings_file.write_text(strings, encoding="utf-8")
           PY
 
           cat > README.md <<'EOF'
