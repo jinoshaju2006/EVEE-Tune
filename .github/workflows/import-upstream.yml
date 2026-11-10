@@ -351,7 +351,7 @@ jobs:
               ".MainActivityBlack": "evee_icon_black",
           }
           for alias_name, drawable_name in alias_icons.items():
-              pattern = r'(<activity-alias\\b(?:(?!</activity-alias>).)*?android:name="' + re.escape(alias_name) + r'"(?:(?!</activity-alias>).)*?</activity-alias>)'
+              pattern = r'(<activity-alias\b(?:(?!</activity-alias>).)*?android:name="' + re.escape(alias_name) + r'"(?:(?!</activity-alias>).)*?</activity-alias>)'
               match = re.search(pattern, manifest, flags=re.DOTALL)
               if not match:
                   raise SystemExit(f"Could not locate launcher alias {alias_name}.")
