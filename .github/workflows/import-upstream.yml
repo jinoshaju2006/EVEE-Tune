@@ -341,26 +341,25 @@ jobs:
           if more_count != 1:
               raise SystemExit("Could not remove the MoreFromUsCard composable.")
 
-          # The About card has a second desktop download pill; remove it too.
+          # Remove everything after the About card's developer-credit text;
+          # this tail is the upstream desktop-download pill and its nested layout.
           about_start = screen.find("private fun AboutCard(")
           about_end = screen.find("\nprivate fun openTelegramChannel", about_start)
           if about_start < 0 or about_end < 0:
               raise SystemExit("Could not locate the About card to remove its desktop link.")
           about = screen[about_start:about_end]
           about, about_desktop_count = re.subn(
-              r'            Surface\(\n'
-              r'                shape = ExpressivePillShape,\n'
-              r'                color = MaterialTheme\.colorScheme\.secondaryContainer,\n'
-              r'                onClick = \{\n'
-              r'                    val intent = Intent\(Intent\.ACTION_VIEW, Uri\.parse\("https://github\.com/Clash-Projects/LastWave-Desktop"\)\).*?'
-              r'            \}\n',
-              '',
+              r'(            Text\(\n'
+              r'                stringResource\(R\.string\.about_made_by\),.*?\n'
+              r'            \)\n)'
+              r'.*?(?=        }\n    }\n})',
+              r'\1',
               about,
               count=1,
               flags=re.DOTALL,
           )
           if about_desktop_count != 1:
-              raise SystemExit("Could not remove the desktop download pill from the About card.")
+              raise SystemExit("Could not remove the complete desktop download area from the About card.")
           screen = screen[:about_start] + about + screen[about_end:]
 
           if "LastWave-Desktop" in screen or 'SectionLabel("More from us")' in screen or "MoreFromUsCard(" in screen:
