@@ -416,6 +416,9 @@ jobs:
 
           PY
 
+          # Apply conservative runtime-performance improvements without changing features.
+          python3 .github/scripts/apply-performance-tuning.py
+
           cat > README.md <<'EOF'
           # EVEE Tune
 
