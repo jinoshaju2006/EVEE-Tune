@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           # Remove the previous imported source before overlaying the new upstream tree.
           # This prevents deleted/renamed upstream Kotlin files from surviving as stale duplicates.
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'README.md' ! -name 'evee_icon.png' -exec rm -rf {} +
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'README.md' ! -name 'evee_icon.png' ! -name 'app_icon_*.png' -exec rm -rf {} +
           rsync -a --exclude='.git/' --exclude='.github/' --exclude='README.md' /tmp/lastwave-upstream/ ./
           # Preserve the user-uploaded EVEE Tune artwork and install it as the adaptive launcher icon.
           if [ ! -s evee_icon.png ]; then
@@ -63,6 +63,17 @@ jobs:
           fi
           mkdir -p app/src/main/res/drawable-nodpi
           cp evee_icon.png app/src/main/res/drawable-nodpi/evee_icon.png
+          # Preserve and install the four user-supplied EVEE Tune appearance icons.
+          for icon in app_icon_default_.png app_icon_black_and_white.png app_icon_monochrome.png app_icon_pink_.png; do
+            if [ ! -s "$icon" ]; then
+              echo "Required appearance icon $icon is missing from the repository root." >&2
+              exit 1
+            fi
+          done
+          cp app_icon_default_.png app/src/main/res/drawable-nodpi/evee_icon_default.png
+          cp app_icon_black_and_white.png app/src/main/res/drawable-nodpi/evee_icon_desktop.png
+          cp app_icon_monochrome.png app/src/main/res/drawable-nodpi/evee_icon_white.png
+          cp app_icon_pink_.png app/src/main/res/drawable-nodpi/evee_icon_black.png
 
           python3 <<'PY'
           from pathlib import Path
@@ -312,6 +323,43 @@ jobs:
               raise SystemExit("Could not locate the About card logo; stopping without committing.")
           screen = screen.replace(about_icon_old, about_icon_new, 1)
           settings_screen.write_text(screen, encoding="utf-8")
+
+          # Connect the four appearance choices to the supplied EVEE Tune artwork.
+          app_icon_file = Path("app/src/main/java/com/lastwave/app/data/local/AppIcon.kt")
+          if not app_icon_file.exists():
+              raise SystemExit("Could not locate AppIcon.kt; stopping without committing.")
+          app_icon_source = app_icon_file.read_text(encoding="utf-8")
+          icon_replacements = {
+              "R.drawable.ic_launcher_logo,": "R.drawable.evee_icon_default,",
+              "R.drawable.ic_launcher_logo_desktop,": "R.drawable.evee_icon_desktop,",
+              "R.drawable.ic_launcher_logo_white,": "R.drawable.evee_icon_white,",
+              "R.drawable.ic_launcher_logo_black,": "R.drawable.evee_icon_black,",
+          }
+          for old_icon, new_icon in icon_replacements.items():
+              if app_icon_source.count(old_icon) != 1:
+                  raise SystemExit(f"Could not uniquely locate {old_icon} in AppIcon.kt.")
+              app_icon_source = app_icon_source.replace(old_icon, new_icon, 1)
+          app_icon_file.write_text(app_icon_source, encoding="utf-8")
+
+          # Ensure each launcher alias uses the matching supplied icon as well.
+          manifest_file = Path("app/src/main/AndroidManifest.xml")
+          manifest = manifest_file.read_text(encoding="utf-8")
+          alias_icons = {
+              ".MainActivity": "evee_icon_default",
+              ".MainActivityDesktop": "evee_icon_desktop",
+              ".MainActivityWhite": "evee_icon_white",
+              ".MainActivityBlack": "evee_icon_black",
+          }
+          for alias_name, drawable_name in alias_icons.items():
+              pattern = r'(<activity-alias\\b(?:(?!</activity-alias>).)*?android:name="' + re.escape(alias_name) + r'"(?:(?!</activity-alias>).)*?</activity-alias>)'
+              match = re.search(pattern, manifest, flags=re.DOTALL)
+              if not match:
+                  raise SystemExit(f"Could not locate launcher alias {alias_name}.")
+              block = match.group(1)
+              block = re.sub(r'android:icon="@mipmap/[^"]+"', f'android:icon="@drawable/{drawable_name}"', block, count=1)
+              block = re.sub(r'android:roundIcon="@mipmap/[^"]+"', f'android:roundIcon="@drawable/{drawable_name}"', block, count=1)
+              manifest = manifest[:match.start(1)] + block + manifest[match.end(1):]
+          manifest_file.write_text(manifest, encoding="utf-8")
 
           # Remove the LastWave desktop promotion from both About locations,
           # and remove the complete More from us section and its three app cards.
