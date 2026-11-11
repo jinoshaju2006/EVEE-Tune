@@ -687,10 +687,15 @@ jobs:
                                 isHighlighted = (highlightedSettingId == "appearance.dynamic_bar"),
                             )
                         }'''
-          if haptics_end in screen and 'title = "Dynamic Bar"' not in screen:
-              screen = screen.replace(haptics_end, new_row, 1)
-          elif 'title = "Dynamic Bar"' not in screen:
-              raise SystemExit("Could not append Dynamic Bar settings row.")
+          if 'title = "Dynamic Bar"' not in screen:
+              haptics_marker = 'isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),'
+              if screen.count(haptics_marker) != 1:
+                  raise SystemExit("Could not uniquely locate the UI haptics row.")
+              marker_index = screen.index(haptics_marker)
+              card_close = screen.index('\\n                            )', marker_index)
+              group_close = screen.index('\\n                        }', card_close)
+              dynamic_row = new_row.split('\\n', 2)[2]
+              screen = screen[:group_close] + '\\n' + dynamic_row + screen[group_close:]
           screen_file.write_text(screen, encoding="utf-8")
 
           PY
