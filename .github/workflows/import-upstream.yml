@@ -653,43 +653,41 @@ jobs:
           elif 'SettingsGroup(rowCount = 12)' not in screen:
               raise SystemExit("Could not locate Appearance settings group.")
           case_anchor = '''                            10 -> SettingsToggleCard(
-                                                  icon = Icons.Filled.Vibration,'''
-          case_replacement = '''                            10 -> SettingsToggleCard(
-                                                  icon = Icons.Filled.Vibration,'''
+                                icon = Icons.Filled.Vibration,'''
           if case_anchor not in screen:
               raise SystemExit("Could not locate final Appearance settings row.")
           # Insert the new row immediately after the existing haptics row.
           haptics_end = '''                                isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
-                                                  )
-                                              }'''
+                            )
+                        }'''
           new_row = '''                                isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
-                                                  )
-                                              11 -> SettingsActionCard(
-                                                  icon = Icons.Filled.Album,
-                                                  iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
-                                                  iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                  title = "Dynamic Bar",
-                                                  subtitle = when {
-                                                      android.os.Build.VERSION.SDK_INT < 35 -> "Floating capsule requires Android 15 or newer"
-                                                      android.provider.Settings.canDrawOverlays(overlayContext) -> "Permission enabled • appears while music plays"
-                                                      else -> "Tap to allow the floating music capsule"
-                                                  },
-                                                  onClick = {
-                                                      if (android.os.Build.VERSION.SDK_INT >= 35) {
-                                                          runCatching {
-                                                              overlayContext.startActivity(
-                                                                  android.content.Intent(
-                                                                      android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                                      android.net.Uri.fromParts("package", overlayContext.packageName, null),
-                                                                  ),
-                                                              )
-                                                          }
-                                                      }
-                                                  },
-                                                  position = position,
-                                                  isHighlighted = (highlightedSettingId == "appearance.dynamic_bar"),
-                                              )
-                                          }'''
+                            )
+                            11 -> SettingsActionCard(
+                                icon = Icons.Filled.Album,
+                                iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                                iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                title = "Dynamic Bar",
+                                subtitle = when {
+                                    android.os.Build.VERSION.SDK_INT < 35 -> "Floating capsule requires Android 15 or newer"
+                                    android.provider.Settings.canDrawOverlays(overlayContext) -> "Permission enabled • appears while music plays"
+                                    else -> "Tap to allow the floating music capsule"
+                                },
+                                onClick = {
+                                    if (android.os.Build.VERSION.SDK_INT >= 35) {
+                                        runCatching {
+                                            overlayContext.startActivity(
+                                                android.content.Intent(
+                                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                    android.net.Uri.fromParts("package", overlayContext.packageName, null),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                },
+                                position = position,
+                                isHighlighted = (highlightedSettingId == "appearance.dynamic_bar"),
+                            )
+                        }'''
           if haptics_end in screen and 'title = "Dynamic Bar"' not in screen:
               screen = screen.replace(haptics_end, new_row, 1)
           elif 'title = "Dynamic Bar"' not in screen:
