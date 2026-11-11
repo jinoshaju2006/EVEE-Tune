@@ -180,6 +180,7 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
     }
     private var notificationSignature = ""
     private var widgetSignature = ""
+    private var dynamicBarOverlay: DynamicBarOverlay? = null
     private var waveWidgetSignature = ""
     private var systemStateSignature = ""
     private var legacyBroadcastSignature = ""
@@ -197,6 +198,19 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
+        dynamicBarOverlay = DynamicBarOverlay(
+            context = this,
+            onOpen = {
+                packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+                    launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    runCatching { startActivity(launch) }
+                }
+            },
+            onPlayPause = {
+                if (musicPlayer.state.value.isPlaying) musicPlayer.pause() else musicPlayer.resume()
+            },
+            onNext = { musicPlayer.next() },
+        )
         WaveWidgetUpdater.setPlaybackServiceActive(true)
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         playbackWakeLock = powerManager?.newWakeLock(
@@ -335,6 +349,11 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
                     requestArtwork(state.current)
                     publishSystemState(state)
                     publishNotification(state)
+                    dynamicBarOverlay?.update(
+                        title = state.current?.title.orEmpty(),
+                        artist = state.current?.artist.orEmpty(),
+                        isPlaying = state.isPlaying,
+                    )
                     publishWidget(state)
                     publishOriginOsLyrics(state)
                     publishWaveWidget(state)
@@ -832,6 +851,8 @@ class MusicPlaybackService : MediaBrowserServiceCompat() {
     }
 
     override fun onDestroy() {
+        runCatching { dynamicBarOverlay?.hide() }
+        dynamicBarOverlay = null
         // Safety net: if the service is torn down while the singleton player is
         // still producing audio (an OEM stop, a system-initiated service stop
         // or a missed task-removal path), never leave orphaned playback behind.

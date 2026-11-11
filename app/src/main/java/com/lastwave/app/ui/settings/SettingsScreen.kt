@@ -1316,7 +1316,8 @@ fun SettingsScreen(
                         item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionLabel(stringResource(R.string.settings_section_appearance))
-                    SettingsGroup(rowCount = 11) { index, position ->
+                    val overlayContext = LocalContext.current
+                    SettingsGroup(rowCount = 12) { index, position ->
                         when (index) {
                             0 -> ThemeModeSelectorCard(
                                 currentThemeMode = theme?.themeMode ?: ThemeMode.SYSTEM,
@@ -1435,6 +1436,32 @@ fun SettingsScreen(
                                 position = position,
                                 isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
                             )
+                  11 -> SettingsActionCard(
+                      icon = Icons.Filled.Album,
+                      iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                      iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                      title = "Dynamic Bar",
+                      subtitle = when {
+                          android.os.Build.VERSION.SDK_INT < 35 -> "Floating capsule requires Android 15 or newer"
+                          android.provider.Settings.canDrawOverlays(overlayContext) -> "Permission enabled • appears while music plays"
+                          else -> "Tap to allow the floating music capsule"
+                      },
+                      onClick = {
+                          if (android.os.Build.VERSION.SDK_INT >= 35) {
+                              runCatching {
+                                  overlayContext.startActivity(
+                                      android.content.Intent(
+                                          android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                          android.net.Uri.fromParts("package", overlayContext.packageName, null),
+                                      ),
+                                  )
+                              }
+                          }
+                      },
+                      position = position,
+                      isHighlighted = (highlightedSettingId == "appearance.dynamic_bar"),
+                  )
+              }
                         }
                     }
                 }
