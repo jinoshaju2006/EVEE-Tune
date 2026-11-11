@@ -694,7 +694,7 @@ jobs:
               marker_index = screen.index(haptics_marker)
               card_close = screen.index('\n                            )', marker_index)
               group_close = screen.index('\n                        }', card_close)
-              dynamic_row = new_row.split('\n', 2)[2]
+              dynamic_row = new_row.split('\n', 2)[2].rsplit('\n', 1)[0]
               screen = screen[:group_close] + '\n' + dynamic_row + screen[group_close:]
           screen_file.write_text(screen, encoding="utf-8")
 
