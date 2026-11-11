@@ -1461,7 +1461,6 @@ fun SettingsScreen(
                       position = position,
                       isHighlighted = (highlightedSettingId == "appearance.dynamic_bar"),
                   )
-              }
                         }
                     }
                 }
