@@ -415,6 +415,287 @@ jobs:
               raise SystemExit("Promotional LastWave desktop or More from us content remains.")
           settings_screen.write_text(screen, encoding="utf-8")
 
+          # Add an opt-in Android 15+ floating music capsule. This is deliberately
+          # isolated from the playback engine and is removed automatically when playback stops.
+          manifest_file = Path("app/src/main/AndroidManifest.xml")
+          manifest = manifest_file.read_text(encoding="utf-8")
+          permission = '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />'
+          if permission not in manifest:
+              anchor = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+              if anchor not in manifest:
+                  raise SystemExit("Could not locate manifest permission insertion point.")
+              manifest = manifest.replace(anchor, anchor + "\n" + permission, 1)
+              manifest_file.write_text(manifest, encoding="utf-8")
+
+          overlay_file = Path("app/src/main/java/com/lastwave/app/playback/DynamicBarOverlay.kt")
+          overlay_file.parent.mkdir(parents=True, exist_ok=True)
+          overlay_source = r"""package com.lastwave.app.playback
+
+          import android.content.Context
+          import android.graphics.Color
+          import android.graphics.PixelFormat
+          import android.graphics.drawable.GradientDrawable
+          import android.os.Build
+          import android.provider.Settings
+          import android.view.Gravity
+          import android.view.View
+          import android.view.WindowManager
+          import android.widget.FrameLayout
+          import android.widget.LinearLayout
+          import android.widget.TextView
+
+          /**
+           * Small, opt-in floating now-playing capsule for devices without a native
+           * OEM media island. The system overlay permission is never requested silently.
+           */
+          internal class DynamicBarOverlay(
+              context: Context,
+              private val onOpen: () -> Unit,
+              private val onPlayPause: () -> Unit,
+              private val onNext: () -> Unit,
+          ) {
+              private val appContext = context.applicationContext
+              private val windowManager = appContext.getSystemService(WindowManager::class.java)
+              private var root: FrameLayout? = null
+              private var titleView: TextView? = null
+              private var artistView: TextView? = null
+              private var playView: TextView? = null
+
+              fun update(title: String, artist: String, isPlaying: Boolean) {
+                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM ||
+                      !Settings.canDrawOverlays(appContext) || !isPlaying || title.isBlank()
+                  ) {
+                      hide()
+                      return
+                  }
+
+                  val view = root ?: createView().also { root = it }
+                  titleView?.text = title
+                  artistView?.text = artist
+                  playView?.text = "Ⅱ"
+                  if (view.parent == null) {
+                      runCatching { windowManager.addView(view, windowParams()) }
+                          .onFailure { root = null }
+                  }
+              }
+
+              fun hide() {
+                  val view = root ?: return
+                  runCatching { windowManager.removeViewImmediate(view) }
+                  root = null
+                  titleView = null
+                  artistView = null
+                  playView = null
+              }
+
+              private fun createView(): FrameLayout {
+                  val frame = FrameLayout(appContext)
+                  val pill = LinearLayout(appContext).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(14), dp(8), dp(10), dp(8))
+                      background = GradientDrawable().apply {
+                          setColor(Color.rgb(25, 26, 30))
+                          cornerRadius = dp(32).toFloat()
+                          setStroke(dp(1), Color.argb(70, 255, 255, 255))
+                      }
+                      elevation = dp(8).toFloat()
+                  }
+                  val musicMark = TextView(appContext).apply {
+                      text = "♫"
+                      textSize = 21f
+                      setTextColor(Color.WHITE)
+                      gravity = Gravity.CENTER
+                      background = GradientDrawable().apply {
+                          setColor(Color.rgb(75, 83, 105))
+                          shape = GradientDrawable.OVAL
+                      }
+                  }
+                  pill.addView(musicMark, LinearLayout.LayoutParams(dp(40), dp(40)))
+                  val labels = LinearLayout(appContext).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(10), 0, dp(8), 0)
+                      isClickable = true
+                      setOnClickListener { onOpen() }
+                  }
+                  titleView = TextView(appContext).apply {
+                      textSize = 13f
+                      setTextColor(Color.WHITE)
+                      maxLines = 1
+                      ellipsize = android.text.TextUtils.TruncateAt.END
+                  }
+                  artistView = TextView(appContext).apply {
+                      textSize = 11f
+                      setTextColor(Color.LTGRAY)
+                      maxLines = 1
+                      ellipsize = android.text.TextUtils.TruncateAt.END
+                  }
+                  labels.addView(titleView)
+                  labels.addView(artistView)
+                  pill.addView(labels, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                  playView = actionButton("Ⅱ", "Pause or resume") { onPlayPause() }
+                  pill.addView(playView, LinearLayout.LayoutParams(dp(42), dp(42)))
+                  pill.addView(actionButton("›", "Next track") { onNext() }, LinearLayout.LayoutParams(dp(38), dp(42)))
+                  frame.addView(
+                      pill,
+                      FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                      ).apply {
+                          leftMargin = dp(16)
+                          rightMargin = dp(16)
+                      },
+                  )
+                  frame.setOnClickListener { onOpen() }
+                  return frame
+              }
+
+              private fun actionButton(label: String, description: String, action: () -> Unit) =
+                  TextView(appContext).apply {
+                      text = label
+                      textSize = 22f
+                      gravity = Gravity.CENTER
+                      setTextColor(Color.WHITE)
+                      contentDescription = description
+                      isFocusable = true
+                      isClickable = true
+                      setOnClickListener { action() }
+                      background = GradientDrawable().apply {
+                          setColor(Color.argb(35, 255, 255, 255))
+                          shape = GradientDrawable.OVAL
+                      }
+                  }
+
+              private fun windowParams() = WindowManager.LayoutParams(
+                  WindowManager.LayoutParams.MATCH_PARENT,
+                  dp(68),
+                  WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                      WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                      WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                  PixelFormat.TRANSLUCENT,
+              ).apply {
+                  gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                  y = dp(22)
+              }
+
+              private fun dp(value: Int): Int =
+                  (value * appContext.resources.displayMetrics.density).toInt()
+          }
+          """
+          overlay_file.write_text(overlay_source, encoding="utf-8")
+
+          service_file = Path("app/src/main/java/com/lastwave/app/playback/MusicPlaybackService.kt")
+          service = service_file.read_text(encoding="utf-8")
+          field_anchor = '    private var widgetSignature = ""'
+          if field_anchor not in service:
+              raise SystemExit("Could not locate playback service field insertion point.")
+          if "private var dynamicBarOverlay" not in service:
+              service = service.replace(
+                  field_anchor,
+                  field_anchor + '\n    private var dynamicBarOverlay: DynamicBarOverlay? = null',
+                  1,
+              )
+          create_anchor = '    override fun onCreate() {\n        super.onCreate()'
+          create_replacement = '''    override fun onCreate() {
+                  super.onCreate()
+                  dynamicBarOverlay = DynamicBarOverlay(
+                      context = this,
+                      onOpen = {
+                          packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+                              launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                              runCatching { startActivity(launch) }
+                          }
+                      },
+                      onPlayPause = {
+                          if (musicPlayer.state.value.isPlaying) musicPlayer.pause() else musicPlayer.resume()
+                      },
+                      onNext = { musicPlayer.next() },
+                  )'''
+          if create_anchor in service and "dynamicBarOverlay = DynamicBarOverlay(" not in service:
+              service = service.replace(create_anchor, create_replacement, 1)
+          elif "dynamicBarOverlay = DynamicBarOverlay(" not in service:
+              raise SystemExit("Could not locate playback service onCreate insertion point.")
+          publish_anchor = '                    publishNotification(state)\n                    publishWidget(state)'
+          publish_replacement = '''                    publishNotification(state)
+                              dynamicBarOverlay?.update(
+                                  title = state.current?.title.orEmpty(),
+                                  artist = state.current?.artist.orEmpty(),
+                                  isPlaying = state.isPlaying && !state.isBuffering,
+                              )
+                              publishWidget(state)'''
+          if publish_anchor in service:
+              service = service.replace(publish_anchor, publish_replacement, 1)
+          elif "dynamicBarOverlay?.update(" not in service:
+              raise SystemExit("Could not locate playback state publication point.")
+          destroy_anchor = '    override fun onDestroy() {'
+          if destroy_anchor not in service:
+              raise SystemExit("Could not locate playback service onDestroy.")
+          if 'dynamicBarOverlay?.hide()' not in service:
+              service = service.replace(
+                  destroy_anchor,
+                  destroy_anchor + '\n        runCatching { dynamicBarOverlay?.hide() }\n        dynamicBarOverlay = null',
+                  1,
+              )
+          service_file.write_text(service, encoding="utf-8")
+
+          # Add a permission entry in Appearance. Android owns the special-access
+          # toggle; returning from Settings causes the row to reflect the new state.
+          screen_file = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsScreen.kt")
+          screen = screen_file.read_text(encoding="utf-8")
+          appearance_anchor = '                    SectionLabel(stringResource(R.string.settings_section_appearance))\n                    SettingsGroup(rowCount = 11) { index, position ->'
+          appearance_replacement = '''                    SectionLabel(stringResource(R.string.settings_section_appearance))
+                              val overlayContext = LocalContext.current
+                              SettingsGroup(rowCount = 12) { index, position ->'''
+          if appearance_anchor in screen:
+              screen = screen.replace(appearance_anchor, appearance_replacement, 1)
+          elif 'SettingsGroup(rowCount = 12)' not in screen:
+              raise SystemExit("Could not locate Appearance settings group.")
+          case_anchor = '''                            10 -> SettingsToggleCard(
+                                                  icon = Icons.Filled.Vibration,'''
+          case_replacement = '''                            10 -> SettingsToggleCard(
+                                                  icon = Icons.Filled.Vibration,'''
+          if case_anchor not in screen:
+              raise SystemExit("Could not locate final Appearance settings row.")
+          # Insert the new row immediately after the existing haptics row.
+          haptics_end = '''                                isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
+                                                  )
+                                              }'''
+          new_row = '''                                isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
+                                                  )
+                                              11 -> SettingsActionCard(
+                                                  icon = Icons.Filled.Album,
+                                                  iconContainer = MaterialTheme.colorScheme.tertiaryContainer,
+                                                  iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                  title = "Dynamic Bar",
+                                                  subtitle = when {
+                                                      android.os.Build.VERSION.SDK_INT < 35 -> "Floating capsule requires Android 15 or newer"
+                                                      android.provider.Settings.canDrawOverlays(overlayContext) -> "Permission enabled • appears while music plays"
+                                                      else -> "Tap to allow the floating music capsule"
+                                                  },
+                                                  onClick = {
+                                                      if (android.os.Build.VERSION.SDK_INT >= 35) {
+                                                          runCatching {
+                                                              overlayContext.startActivity(
+                                                                  android.content.Intent(
+                                                                      android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                                      android.net.Uri.fromParts("package", overlayContext.packageName, null),
+                                                                  ),
+                                                              )
+                                                          }
+                                                      }
+                                                  },
+                                                  position = position,
+                                                  isHighlighted = (highlightedSettingId == "appearance.dynamic_bar"),
+                                              )
+                                          }'''
+          if haptics_end in screen and 'title = "Dynamic Bar"' not in screen:
+              screen = screen.replace(haptics_end, new_row, 1)
+          elif 'title = "Dynamic Bar"' not in screen:
+              raise SystemExit("Could not append Dynamic Bar settings row.")
+          screen_file.write_text(screen, encoding="utf-8")
+
           PY
 
           cat > README.md <<'EOF'
