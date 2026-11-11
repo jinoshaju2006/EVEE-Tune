@@ -655,10 +655,6 @@ jobs:
               screen = screen.replace(appearance_anchor, appearance_replacement, 1)
           elif 'SettingsGroup(rowCount = 12)' not in screen:
               raise SystemExit("Could not locate Appearance settings group.")
-          case_anchor = '''                            10 -> SettingsToggleCard(
-                                icon = Icons.Filled.Vibration,'''
-          if case_anchor not in screen:
-              raise SystemExit("Could not locate final Appearance settings row.")
           # Insert the new row immediately after the existing haptics row.
           haptics_end = '''                                isHighlighted = (highlightedSettingId == "appearance.ui_haptics"),
                             )
