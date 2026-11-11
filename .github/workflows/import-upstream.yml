@@ -1,4 +1,5 @@
 name: Import EVEE Tune Android source
+# Stable baseline: preserve the known-good 8211636 app behavior; no refresh-rate override.
 
 on:
   workflow_dispatch:
