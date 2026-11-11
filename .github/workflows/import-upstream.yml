@@ -463,7 +463,7 @@ jobs:
 
               fun update(title: String, artist: String, isPlaying: Boolean) {
                   if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM ||
-                      !Settings.canDrawOverlays(appContext) || !isPlaying || title.isBlank()
+                      !Settings.canDrawOverlays(appContext) || title.isBlank()
                   ) {
                       hide()
                       return
@@ -472,7 +472,7 @@ jobs:
                   val view = root ?: createView().also { root = it }
                   titleView?.text = title
                   artistView?.text = artist
-                  playView?.text = "Ⅱ"
+                  playView?.text = if (isPlaying) "Ⅱ" else "▶"
                   if (view.parent == null) {
                       runCatching { windowManager.addView(view, windowParams()) }
                           .onFailure { root = null }
@@ -519,23 +519,26 @@ jobs:
                       isClickable = true
                       setOnClickListener { onOpen() }
                   }
-                  titleView = TextView(appContext).apply {
+                  val titleLabel = TextView(appContext).apply {
                       textSize = 13f
                       setTextColor(Color.WHITE)
                       maxLines = 1
                       ellipsize = android.text.TextUtils.TruncateAt.END
                   }
-                  artistView = TextView(appContext).apply {
+                  val artistLabel = TextView(appContext).apply {
                       textSize = 11f
                       setTextColor(Color.LTGRAY)
                       maxLines = 1
                       ellipsize = android.text.TextUtils.TruncateAt.END
                   }
-                  labels.addView(titleView)
-                  labels.addView(artistView)
+                  titleView = titleLabel
+                  artistView = artistLabel
+                  labels.addView(titleLabel)
+                  labels.addView(artistLabel)
                   pill.addView(labels, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                  playView = actionButton("Ⅱ", "Pause or resume") { onPlayPause() }
-                  pill.addView(playView, LinearLayout.LayoutParams(dp(42), dp(42)))
+                  val playButton = actionButton("Ⅱ", "Pause or resume") { onPlayPause() }
+                  playView = playButton
+                  pill.addView(playButton, LinearLayout.LayoutParams(dp(42), dp(42)))
                   pill.addView(actionButton("›", "Next track") { onNext() }, LinearLayout.LayoutParams(dp(38), dp(42)))
                   frame.addView(
                       pill,
@@ -622,7 +625,7 @@ jobs:
                               dynamicBarOverlay?.update(
                                   title = state.current?.title.orEmpty(),
                                   artist = state.current?.artist.orEmpty(),
-                                  isPlaying = state.isPlaying && !state.isBuffering,
+                                  isPlaying = state.isPlaying,
                               )
                               publishWidget(state)'''
           if publish_anchor in service:
