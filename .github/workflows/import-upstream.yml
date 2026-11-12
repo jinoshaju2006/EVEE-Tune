@@ -749,6 +749,13 @@ jobs:
           )
           if subtitle_count != 1:
               raise SystemExit("Could not safely remove the update-dependent About subtitle.")
+          screen, banner_count = re.subn(
+              r'\n[ \t]*// Prominent Update Available Banner Card.*?(?=\n[ \t]*AboutCard\()',
+              '\n',
+              screen,
+              count=1,
+              flags=re.DOTALL,
+          )
           screen, update_card_count = re.subn(
               r'\n\s*SettingsActionCard\(\n\s*icon = Icons\.Filled\.CloudDownload,.*?isHighlighted = \(highlightedSettingId == "about\.check_updates"\),\n\s*\)\n',
               '\n',
