@@ -756,13 +756,18 @@ jobs:
               count=1,
               flags=re.DOTALL,
           )
-          screen, update_card_count = re.subn(
-              r'\n\s*SettingsActionCard\(\n\s*icon = Icons\.Filled\.CloudDownload,.*?isHighlighted = \(highlightedSettingId == "about\.check_updates"\),\n\s*\)\n',
-              '\n',
-              screen,
-              count=1,
-              flags=re.DOTALL,
-          )
+          # Remove only the About update card. Locate it by its unique highlight ID,
+          # then remove the nearest SettingsActionCard call (never a generic CloudDownload card).
+          update_marker = 'isHighlighted = (highlightedSettingId == "about.check_updates"),'
+          if screen.count(update_marker) != 1:
+              raise SystemExit("Could not uniquely locate the About update card.")
+          marker_index = screen.index(update_marker)
+          card_start = screen.rfind("SettingsActionCard(", 0, marker_index)
+          card_end = screen.find("\\n                    )", marker_index)
+          if card_start < 0 or card_end < 0:
+              raise SystemExit("Could not safely bound the About update card.")
+          screen = screen[:card_start] + screen[card_end + len("\\n                    )"): ]
+          update_card_count = 1
           if banner_count != 1 or update_card_count != 1:
               raise SystemExit("Could not remove both LastWave update UI elements.")
           screen = screen.replace(
