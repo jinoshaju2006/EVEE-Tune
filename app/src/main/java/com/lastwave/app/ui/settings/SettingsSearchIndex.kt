@@ -1451,6 +1451,23 @@ object SettingsSearchIndex {
             )
             add(
                 SettingsEntry(
+                    id = "about.check_updates",
+                    title = "Check for Updates",
+                    subtitle = "Check GitHub releases for the latest version and changelog",
+                    keywords = listOf(
+                        "update", "check updates", "new version", "github releases", "changelog",
+                        "download update", "latest release", "upgrade"
+                    ),
+                    icon = Icons.Filled.CloudDownload,
+                    iconContainer = { MaterialTheme.colorScheme.primaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
+                    parentTab = SettingsTab.ABOUT,
+                    section = "About & Community",
+                    type = EntryType.ACTION,
+                )
+            )
+            add(
+                SettingsEntry(
                     id = "about.source_code",
                     title = "Open Source Code",
                     subtitle = "View repository at github.com/Clash-Projects/LastWave-native",

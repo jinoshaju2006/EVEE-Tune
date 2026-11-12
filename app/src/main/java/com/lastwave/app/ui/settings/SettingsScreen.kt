@@ -402,6 +402,7 @@ fun SettingsScreen(
     val forceSoftwareVolume by viewModel.forceSoftwareVolume.collectAsStateWithLifecycle()
     val internalDirectAvailability by viewModel.internalDirectAvailability.collectAsStateWithLifecycle()
     val loudness by viewModel.loudness.collectAsStateWithLifecycle()
+    val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()
     val discordPresenceEnabled by viewModel.discordPresenceEnabled.collectAsStateWithLifecycle()
     val isLastFmConnected by viewModel.isLastFmConnected.collectAsStateWithLifecycle()
     val hasApiKey by viewModel.hasApiKey.collectAsStateWithLifecycle()
@@ -759,7 +760,7 @@ fun SettingsScreen(
                                             iconContainer = MaterialTheme.colorScheme.primaryContainer,
                                             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             title = stringResource(R.string.set_cat_about),
-                                            subtitle = "v${appVersionName(context)} • Language, Community, Source code",
+                                            subtitle = if (updateInfo.isUpdateAvailable) "Update Available (${updateInfo.latestVersion}) \u2022 v${appVersionName(context)}" else "v${appVersionName(context)} \u2022 Language, Community, Source code",
                                             onClick = { activeTab = SettingsTab.ABOUT },
                                             position = position,
                                         )
@@ -2223,22 +2224,104 @@ fun SettingsScreen(
             }
                         Spacer(Modifier.height(4.dp))
 
+                    // Prominent Update Available Banner Card (if newer version detected)
+                    if (updateInfo.isUpdateAvailable) {
+                        Surface(
+                            shape = CardOuterShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(CardOuterShape)
+                                .clickable { viewModel.openUpdate(context) },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CloudDownload,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Update Available!",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Text(
+                                        text = "Version ${updateInfo.latestVersion} is ready to install",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                ) {
+                                    Text(
+                                        text = "Update",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
 
                     AboutCard(
                         versionName = appVersionName(context),
                         appIcon = theme?.appIcon ?: AppIcon.DEFAULT,
                     )
 
-                    
+                    SettingsActionCard(
+                        icon = Icons.Filled.CloudDownload,
+                        iconContainer = if (updateInfo.isUpdateAvailable) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = if (updateInfo.isUpdateAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
+                        title = if (updateInfo.isUpdateAvailable) "Update Ready (${updateInfo.latestVersion})" else "Check for Updates",
+                        subtitle = when {
+                            updateInfo.isChecking -> "Checking GitHub releases..."
+                            updateInfo.isUpdateAvailable -> {
+                                val fileName = updateInfo.downloadFileName
+                                if (!fileName.isNullOrBlank()) "Tap to download $fileName" else "Tap to download new version"
+                            }
+                            !updateInfo.message.isNullOrBlank() -> updateInfo.message.orEmpty()
+                            else -> "Current version: ${appVersionName(context)}"
+                        },
+                        onClick = {
+                            if (updateInfo.isUpdateAvailable) {
+                                viewModel.openUpdate(context)
+                            } else {
+                                viewModel.checkForUpdates()
+                            }
+                        },
+                        isHighlighted = (highlightedSettingId == "about.check_updates"),
+                    )
 
                     SettingsActionCard(
                         icon = Icons.Filled.Code,
                         iconContainer = MaterialTheme.colorScheme.secondaryContainer,
                         iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                         title = stringResource(R.string.settings_source_code),
-                        subtitle = "github.com/jinoshaju2006/EVEE-Tune",
+                        subtitle = "github.com/Clash-Projects/LastWave-native",
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/jinoshaju2006/EVEE-Tune"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Clash-Projects/LastWave-native"))
                             if (!startActivitySafely(context, intent)) {
                                 viewModel.showToast(context.getString(R.string.toast_no_browser_plain))
                             }

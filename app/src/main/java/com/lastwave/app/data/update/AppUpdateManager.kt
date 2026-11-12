@@ -53,7 +53,7 @@ class AppUpdateManager @Inject constructor(
     private val okHttpClient: OkHttpClient,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val prefs = context.getSharedPreferences("lastwave_updates", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("evee_tune_updates", Context.MODE_PRIVATE)
 
     private val _updateInfo = MutableStateFlow(
         UpdateInfo(
@@ -62,6 +62,9 @@ class AppUpdateManager @Inject constructor(
     )
     val updateInfo: StateFlow<UpdateInfo> = _updateInfo.asStateFlow()
 
+    init {
+        checkForUpdate(isSilent = true)
+    }
 
     fun isUncompressedBuild(): Boolean {
         val pref = prefs.getString("preferred_variant", null)
@@ -92,7 +95,94 @@ class AppUpdateManager @Inject constructor(
     }
 
     fun checkForUpdate(isSilent: Boolean = false) {
-        _updateInfo.update { it.copy(isChecking = false, isUpdateAvailable = false, message = null) }
+        scope.launch {
+            _updateInfo.update {
+                it.copy(
+                    isChecking = true,
+                    message = if (!isSilent) "Checking for updates..." else it.message,
+                )
+            }
+            try {
+                val request = Request.Builder()
+                    .url("https://api.github.com/repos/jinoshaju2006/EVEE-Tune/releases/latest")
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .header("User-Agent", "EVEE-Tune-Android")
+                    .build()
+
+                val response = withContext(Dispatchers.IO) {
+                    okHttpClient.newCall(request).execute()
+                }
+
+                if (!response.isSuccessful) {
+                    val code = response.code
+                    _updateInfo.update {
+                        it.copy(
+                            isChecking = false,
+                            message = if (!isSilent) "Could not check updates (HTTP $code)" else null,
+                        )
+                    }
+                    return@launch
+                }
+
+                val body = response.body?.string().orEmpty()
+                val json = JSONObject(body)
+                val tagName = json.optString("tag_name", "")
+                val releaseUrl = json.optString("html_url", "https://github.com/jinoshaju2006/EVEE-Tune/releases")
+                val releaseNotes = json.optString("body", "")
+
+                val apkAssets = mutableListOf<ReleaseAsset>()
+                val assets = json.optJSONArray("assets")
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.optJSONObject(i) ?: continue
+                        val name = asset.optString("name", "").trim()
+                        val download = asset.optString("browser_download_url", "").trim()
+                        if (name.endsWith(".apk", ignoreCase = true) && download.isNotBlank()) {
+                            apkAssets.add(ReleaseAsset(name = name, downloadUrl = download))
+                        }
+                    }
+                }
+
+                val bestAsset = selectBestAsset(
+                    assets = apkAssets,
+                    isUncompressed = isUncompressedBuild(),
+                    sdkInt = Build.VERSION.SDK_INT,
+                    isVivoOrigin = BuildConfig.VIVO_ORIGIN,
+                )
+                val downloadUrl = bestAsset?.downloadUrl ?: releaseUrl
+                val downloadFileName = bestAsset?.name
+
+                val currentVersion = getCurrentVersion()
+                val hasNewer = isNewerVersion(tagName, currentVersion)
+                val cleanTag = tagName.removePrefix("v").removePrefix("V")
+                val dismissedVersion = prefs.getString("dismissed_version", null)
+                val isDismissed = dismissedVersion == cleanTag
+
+                _updateInfo.update {
+                    it.copy(
+                        isChecking = false,
+                        isUpdateAvailable = hasNewer,
+                        latestVersion = cleanTag,
+                        currentVersion = currentVersion,
+                        releaseNotes = releaseNotes,
+                        releaseUrl = releaseUrl,
+                        downloadUrl = downloadUrl,
+                        downloadFileName = downloadFileName,
+                        isDismissed = isDismissed,
+                        message = if (!isSilent) {
+                            if (hasNewer) "New version $cleanTag available!" else "You're on the latest version ($currentVersion)"
+                        } else null,
+                    )
+                }
+            } catch (e: Exception) {
+                _updateInfo.update {
+                    it.copy(
+                        isChecking = false,
+                        message = if (!isSilent) "Check failed: ${e.message ?: "Network error"}" else null,
+                    )
+                }
+            }
+        }
     }
 
     fun dismissUpdate(version: String) {
@@ -101,7 +191,17 @@ class AppUpdateManager @Inject constructor(
         _updateInfo.update { it.copy(isDismissed = true) }
     }
 
-    fun openUpdate(context: Context) { /* LastWave updater disabled in EVEE Tune. */ }
+    fun openUpdate(context: Context) {
+        val targetUrl = _updateInfo.value.downloadUrl ?: _updateInfo.value.releaseUrl.ifBlank {
+            "https://github.com/jinoshaju2006/EVEE-Tune/releases"
+        }
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) { }
+    }
 
     fun isNewerVersion(remote: String, local: String): Boolean {
         if (remote.isBlank() || local.isBlank()) return false
