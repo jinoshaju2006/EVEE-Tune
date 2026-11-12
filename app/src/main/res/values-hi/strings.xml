@@ -6,7 +6,7 @@
 
     <string name="nav_feed">फ़ीड</string>
     <string name="nav_stats">आँकड़े</string>
-    <string name="nav_playlists">प्लेलिस्ट</string>
+    <string name="nav_playlists">लाइब्रेरी</string>
     <string name="nav_create_playlist">प्लेलिस्ट बनाएँ / जनरेट करें</string>
     <string name="update_available">अपडेट उपलब्ध</string>
     <string name="update">अपडेट करें</string>
@@ -53,9 +53,6 @@
     <string name="settings_lyrics_animation">लिरिक्स एनिमेशन</string>
     <string name="settings_equalizer">इक्वलाइज़र</string>
     <string name="settings_equalizer_sub">15 बैंड में ध्वनि सँवारें</string>
-    <string name="settings_wavy_seekbar">वेवी सीकबार</string>
-    <string name="settings_wavy_seekbar_on">बहु-परत तरल वेवी स्लाइडर</string>
-    <string name="settings_wavy_seekbar_off">क्लासिक मानक स्लाइडर</string>
     <string name="settings_studio_clarity">स्टूडियो मास्टर स्पष्टता</string>
     <string name="settings_studio_clarity_on">क्रिस्टल-स्पष्ट खुली ध्वनि • हवादार विवरण • गहरा साफ़ पृथक्करण</string>
     <string name="settings_studio_clarity_off">मूल असंसाधित आउटपुट</string>
@@ -503,7 +500,7 @@
     <string name="pl_export_title">प्लेलिस्ट निर्यात करें</string>
     <string name="pl_choose_image">छवि चुनें</string>
     <string name="pl_change_image">छवि बदलें</string>
-    <string name="pl_title">प्लेलिस्ट</string>
+    <string name="pl_title">लाइब्रेरी</string>
     <string name="pl_selected_count">%1$d चयनित</string>
     <string name="pl_select_more_hint">अधिक चुनने के लिए देर तक दबाएँ</string>
     <string name="pl_count_only">%1$d प्लेलिस्ट</string>

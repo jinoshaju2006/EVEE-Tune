@@ -6,7 +6,7 @@
 
     <string name="nav_feed">Início</string>
     <string name="nav_stats">Estatísticas</string>
-    <string name="nav_playlists">Playlists</string>
+    <string name="nav_playlists">Biblioteca</string>
     <string name="nav_create_playlist">Criar / Gerar playlist</string>
     <string name="update_available">Atualização disponível</string>
     <string name="update">Atualizar</string>
@@ -51,9 +51,6 @@
     <string name="settings_lyrics_animation">Animação das letras</string>
     <string name="settings_equalizer">Equalizador</string>
     <string name="settings_equalizer_sub">Modele o som em 15 faixas</string>
-    <string name="settings_wavy_seekbar">Barra ondulada</string>
-    <string name="settings_wavy_seekbar_on">Controle deslizante ondulado fluido em camadas</string>
-    <string name="settings_wavy_seekbar_off">Controle deslizante padrão clássico</string>
     <string name="settings_studio_clarity">Clareza Master de estúdio</string>
     <string name="settings_studio_clarity_on">Som aberto cristalino • detalhes arejados • separação profunda e limpa</string>
     <string name="settings_studio_clarity_off">Saída original sem processamento</string>
@@ -499,7 +496,7 @@
     <string name="pl_export_title">Exportar lista de reprodução</string>
     <string name="pl_choose_image">Escolha a imagem</string>
     <string name="pl_change_image">Alterar imagem</string>
-    <string name="pl_title">Lista de reprodução</string>
+    <string name="pl_title">Biblioteca</string>
     <string name="pl_selected_count">%1$d selecionado</string>
     <string name="pl_select_more_hint">Pressione e segure para selecionar mais</string>
     <string name="pl_count_only">%1$d Listas de reprodução</string>

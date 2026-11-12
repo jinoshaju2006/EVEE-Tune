@@ -7,7 +7,7 @@
     <!-- 底部导航 -->
     <string name="nav_feed">推荐</string>
     <string name="nav_stats">统计</string>
-    <string name="nav_playlists">歌单</string>
+    <string name="nav_playlists">资料库</string>
     <string name="nav_create_playlist">创建 / 生成歌单</string>
     <string name="update_available">有可用更新</string>
     <string name="update">更新</string>
@@ -53,9 +53,6 @@
     <string name="settings_lyrics_animation">歌词动画</string>
     <string name="settings_equalizer">均衡器</string>
     <string name="settings_equalizer_sub">15 段频率塑造声音</string>
-    <string name="settings_wavy_seekbar">波浪进度条</string>
-    <string name="settings_wavy_seekbar_on">多层流体波浪进度条</string>
-    <string name="settings_wavy_seekbar_off">经典标准进度条</string>
     <string name="settings_studio_clarity">母带级清晰度</string>
     <string name="settings_studio_clarity_on">晶透开阔的声音 • 空灵细节 • 深邃干净的分离度</string>
     <string name="settings_studio_clarity_off">原始未加工输出</string>
@@ -502,7 +499,7 @@
     <string name="pl_export_title">导出播放列表</string>
     <string name="pl_choose_image">选择图片</string>
     <string name="pl_change_image">更改图像</string>
-    <string name="pl_title">播放列表</string>
+    <string name="pl_title">资料库</string>
     <string name="pl_selected_count">已选择 %1$d</string>
     <string name="pl_select_more_hint">长按选择更多</string>
     <string name="pl_count_only">%1$d 播放列表</string>

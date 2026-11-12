@@ -104,17 +104,31 @@ object SettingsSearchIndex {
             // ==========================================
             add(
                 SettingsEntry(
-                    id = "audio.streaming_quality",
-                    title = "Streaming Quality",
-                    subtitle = "Lossless, Hi-Res, FLAC, AAC, MP3, 24-bit / 192 kHz, bit depth & sample rate",
+                    id = "audio.wifi_streaming_quality",
+                    title = "Wi-Fi Streaming Quality",
+                    subtitle = "Choose audio quality while connected to Wi-Fi",
                     keywords = listOf(
                         "quality", "bitrate", "flac", "lossless", "hires", "hi-res", "dolby", "atmos",
                         "mp3", "aac", "opus", "streaming", "audio quality", "sound quality", "192khz",
-                        "24-bit", "stream", "format"
+                        "24-bit", "stream", "format", "wifi", "wireless"
                     ),
                     icon = Icons.Filled.HighQuality,
                     iconContainer = { MaterialTheme.colorScheme.primaryContainer },
                     iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
+                    parentTab = SettingsTab.AUDIO,
+                    section = "Audio & Playback",
+                    type = EntryType.ACTION,
+                )
+            )
+            add(
+                SettingsEntry(
+                    id = "audio.cellular_streaming_quality",
+                    title = "Cellular Streaming Quality",
+                    subtitle = "Choose audio quality while using mobile data",
+                    keywords = listOf("quality", "bitrate", "streaming", "cellular", "mobile data", "data usage", "audio", "auto", "adaptive"),
+                    icon = Icons.Filled.HighQuality,
+                    iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
                     parentTab = SettingsTab.AUDIO,
                     section = "Audio & Playback",
                     type = EntryType.ACTION,
@@ -135,6 +149,23 @@ object SettingsSearchIndex {
                     parentTab = SettingsTab.AUDIO,
                     section = "Audio & Playback",
                     type = EntryType.ACTION,
+                )
+            )
+            add(
+                SettingsEntry(
+                    id = "audio.auto_upgrade_hi_res",
+                    title = "Auto upgrade to Hi-Res",
+                    subtitle = "Start fast on Opus, then switch to lossless when available",
+                    keywords = listOf(
+                        "auto upgrade", "hi-res", "hires", "lossless", "flac", "opus",
+                        "upgrade", "streaming", "quality", "background upgrade"
+                    ),
+                    icon = Icons.Filled.HighQuality,
+                    iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
+                    iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
+                    parentTab = SettingsTab.AUDIO,
+                    section = "Audio & Playback",
+                    type = EntryType.TOGGLE,
                 )
             )
             add(
@@ -552,7 +583,7 @@ object SettingsSearchIndex {
                 SettingsEntry(
                     id = "appearance.md3_nav_bar",
                     title = "Material 3 Navigation Bar",
-                    subtitle = "Classic full-width bottom navigation bar instead of the floating dock",
+                    subtitle = "Compact floating dock with a label beside the selected icon",
                     keywords = listOf(
                         "md3", "material 3", "navigation bar", "bottom bar", "nav bar",
                         "dock", "floating dock", "full width nav"
@@ -665,23 +696,6 @@ object SettingsSearchIndex {
                     parentTab = SettingsTab.APPEARANCE,
                     section = "Experimental & Features",
                     type = EntryType.ACTION,
-                )
-            )
-            add(
-                SettingsEntry(
-                    id = "appearance.wavy_seekbar",
-                    title = "Fluid Wavy Seekbar",
-                    subtitle = "Multi-layer fluid wavy progress slider for track playback",
-                    keywords = listOf(
-                        "wavy seekbar", "wave slider", "progress bar", "fluid seekbar", "waveform",
-                        "scrubber", "timeline", "squiggly line"
-                    ),
-                    icon = Icons.Filled.Waves,
-                    iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
-                    iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
-                    parentTab = SettingsTab.APPEARANCE,
-                    section = "Experimental & Features",
-                    type = EntryType.TOGGLE,
                 )
             )
             add(
@@ -1111,38 +1125,6 @@ object SettingsSearchIndex {
                     type = EntryType.ACTION,
                 )
             )
-            add(
-                SettingsEntry(
-                    id = "liked.local",
-                    title = "Save to Liked Songs",
-                    subtitle = "Keep a Liked Songs list in this app",
-                    keywords = listOf(
-                        "liked songs", "like", "heart", "favorite", "favourites", "local playlist"
-                    ),
-                    icon = Icons.Filled.Favorite,
-                    iconContainer = { MaterialTheme.colorScheme.primaryContainer },
-                    iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
-                    parentTab = SettingsTab.YOUTUBE,
-                    section = "Liked Songs",
-                    type = EntryType.TOGGLE,
-                )
-            )
-            add(
-                SettingsEntry(
-                    id = "liked.youtube",
-                    title = "Sync Liked Songs to YouTube Music",
-                    subtitle = "Also mark liked songs as liked on YouTube Music",
-                    keywords = listOf(
-                        "liked songs", "sync", "youtube music", "like", "heart", "favorite"
-                    ),
-                    icon = Icons.Filled.CloudSync,
-                    iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
-                    iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
-                    parentTab = SettingsTab.YOUTUBE,
-                    section = "Liked Songs",
-                    type = EntryType.TOGGLE,
-                )
-            )
 
             // ==========================================
             // TAB: LAST.FM
@@ -1462,23 +1444,6 @@ object SettingsSearchIndex {
                     icon = Icons.Filled.Code,
                     iconContainer = { MaterialTheme.colorScheme.secondaryContainer },
                     iconTint = { MaterialTheme.colorScheme.onSecondaryContainer },
-                    parentTab = SettingsTab.ABOUT,
-                    section = "About & Community",
-                    type = EntryType.ACTION,
-                )
-            )
-            add(
-                SettingsEntry(
-                    id = "about.check_updates",
-                    title = "Check for Updates",
-                    subtitle = "Check GitHub releases for the latest version and changelog",
-                    keywords = listOf(
-                        "update", "check updates", "new version", "github releases", "changelog",
-                        "download update", "latest release", "upgrade"
-                    ),
-                    icon = Icons.Filled.CloudDownload,
-                    iconContainer = { MaterialTheme.colorScheme.primaryContainer },
-                    iconTint = { MaterialTheme.colorScheme.onPrimaryContainer },
                     parentTab = SettingsTab.ABOUT,
                     section = "About & Community",
                     type = EntryType.ACTION,

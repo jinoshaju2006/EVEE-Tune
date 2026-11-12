@@ -198,6 +198,10 @@ class LosslessMusicApi @Inject constructor(
                     QUALITY_MP3_320,
                 )
             }
+            // A selected bitrate is a ceiling. Never turn a 320 kbps or
+            // Data Saver request into a lossless/Hi-Res rendition.
+            if (preferred == QUALITY_MP3_320) return listOf(QUALITY_MP3_320, QUALITY_DATA_SAVER)
+            if (preferred == QUALITY_DATA_SAVER) return listOf(QUALITY_DATA_SAVER)
             // Lower tiers: preferred first, then higher above, then lower below.
             // Never includes Atmos (28) — Atmos plays only when explicitly selected.
             // Data Saver is excluded from fallback (YouTube beats 96k) unless explicitly chosen.
@@ -291,7 +295,7 @@ class LosslessMusicApi @Inject constructor(
         /** True for E-AC-3 spatial codec labels. Pure; safe to unit-test on JVM. */
         fun isAtmosCodec(codec: String?): Boolean {
             val c = codec?.trim()?.lowercase().orEmpty()
-            return c.startsWith("ec-3") || c.startsWith("eac3") || c.startsWith("ac-3")
+            return c.startsWith("ec-3") || c.startsWith("eac3") || c.startsWith("ac-3") || c.contains("atmos") || c.contains("dolby")
         }
 
         /** True when the stream bytes are E-AC-3 spatial. Fail-open (false) when unreadable. */
@@ -455,7 +459,7 @@ class LosslessMusicApi @Inject constructor(
         // (dakuten), Hangul jamo or Indic vowel signs destroys the title and
         // made non-English songs normalize to blank, so they never matched a
         // lossless candidate and fell back to the Opus stream.
-        private val DIACRITICS = Regex("(?<=\\p{IsLatin})\\p{M}+")
+        private val DIACRITICS = Regex("(?<=\\p{Script=Latin})\\p{M}+")
         private val NON_ALPHANUMERIC = Regex("[^\\p{L}\\p{N}\\p{M}]+")
         private val MULTI_SPACE = Regex("\\s+")
 
@@ -993,14 +997,32 @@ class LosslessMusicApi @Inject constructor(
         hybridServer.prewarm()
         val plan = addonSearchPlan(title, artist, expectedAlbum, preferredQuality)
         val query = plan.queries.firstOrNull() ?: return@withContext
+        val targetSeconds = expectedDurationSeconds?.takeIf { it in 1..86400 }
+        val warmTarget = targetSeconds
+            ?.takeIf { title.trim().length <= 512 && artist.trim().length <= 512 }
+            ?.let { seconds ->
+                android.util.Base64.encodeToString(
+                    JSONObject()
+                        .put("title", title.trim())
+                        .put("artist", artist.trim())
+                        .put("durationSeconds", seconds)
+                        .toString()
+                        .toByteArray(Charsets.UTF_8),
+                    android.util.Base64.URL_SAFE or
+                        android.util.Base64.NO_WRAP or
+                        android.util.Base64.NO_PADDING,
+                )
+            }
         for (creds in getAllEnabledCredentials()) {
-            val key = "${creds.baseUrl}|${plan.qualityParam}|${plan.isAtmosPreferred}|$query"
+            // Include the target duration so two versions with the same query
+            // are warmed separately instead of the second being skipped.
+            val key = "${creds.baseUrl}|${plan.qualityParam}|${plan.isAtmosPreferred}|${targetSeconds ?: 0}|$query"
             val fresh = synchronized(warmedSearchKeys) { warmedSearchKeys.put(key, Unit) == null }
             if (!fresh) continue
             val client = AddonClient(creds.baseUrl, resolutionClient, nativeSecrets = nativeSecrets)
             val result = try {
                 currentCoroutineContext().ensureActive()
-                client.search(query, plan.qualityParam, plan.isAtmosPreferred)
+                client.search(query, plan.qualityParam, plan.isAtmosPreferred, warmTarget)
             } catch (cancelled: CancellationException) {
                 // An abandoned warm-up did not populate the server cache.
                 synchronized(warmedSearchKeys) { warmedSearchKeys.remove(key) }
@@ -1108,8 +1130,8 @@ class LosslessMusicApi @Inject constructor(
         isAtmosPreferred -> listOf("atmos", "hi_res", "lossless", "high")
         qualityParam == "hi_res" -> listOf("hi_res", "lossless", "high")
         qualityParam == "lossless" -> listOf("lossless", "hi_res", "high")
-        qualityParam == "high" -> listOf("high", "lossless", "hi_res")
-        qualityParam == "low" -> listOf("low", "high", "lossless", "hi_res")
+        qualityParam == "high" -> listOf("high")
+        qualityParam == "low" -> listOf("low")
         else -> listOf(qualityParam, "lossless", "high")
     }
 
@@ -1182,7 +1204,7 @@ class LosslessMusicApi @Inject constructor(
         // - YouTube: strict, never reaches here (resolveStream returns null early).
         // - Atmos (28): atmos -> hi_res -> lossless -> high, then YouTube. Only path containing "atmos".
         // - Hi-Res (27/7): step DOWN only (hi_res -> lossless -> high), never up to Atmos. YouTube last.
-        // - Lower tiers: preferred first, then higher above, then lower. Never Atmos.
+        // - 320 / Data Saver: exact lossy tier only; never resolve to lossless or Hi-Res.
         val qualitiesToTry = qualityTiers(qualityParam, isAtmosPreferred)
         for (q in qualitiesToTry) {
             // Each tier declares its own intent: only the immersive tier
@@ -1281,7 +1303,21 @@ class LosslessMusicApi @Inject constructor(
                 val effectiveSampleRate = manifestSampleRate?.toDouble() ?: rawSampleRate
                 val streamCodec = stream?.codec.orEmpty().lowercase()
                 val isLossyCodec = streamCodec.contains("mp4a") || streamCodec.contains("aac") || streamCodec.contains("mp3") || streamCodec.contains("opus")
-                val isLossyStream = isLossyCodec || stream?.quality.equals("high", ignoreCase = true) || stream?.quality.equals("low", ignoreCase = true) || q == "high" || q == "low"
+                val rawUrlPath = rawUrl.substringBefore('?').lowercase()
+                val manifestCodec = manifestCodecOf(rawUrl)?.lowercase().orEmpty()
+                val explicitLosslessStream = !isLossyCodec && (
+                    streamCodec.contains("flac") || manifestCodec.contains("flac") ||
+                        rawUrlPath.endsWith(".flac") || (stream?.bitDepth ?: candidate.bitDepth ?: 0) > 16 ||
+                        effectiveSampleRate > 48_000.0
+                    )
+                val isLossyStream = !explicitLosslessStream && (
+                    isLossyCodec ||
+                        stream?.quality.equals("high", ignoreCase = true) ||
+                        stream?.quality.equals("low", ignoreCase = true) ||
+                        stream?.audioQuality.equals("high", ignoreCase = true) ||
+                        stream?.audioQuality.equals("low", ignoreCase = true) ||
+                        q == "high" || q == "low"
+                    )
 
                 val isHiResFlagged = !isLossyStream && (candidate.isHiResFlagged() ||
                     stream?.quality?.contains("HI_RES", ignoreCase = true) == true ||
@@ -1311,17 +1347,28 @@ class LosslessMusicApi @Inject constructor(
                 }
                 val formatId = when {
                     isStreamAtmos -> QUALITY_DOLBY_ATMOS
+                    explicitLosslessStream && ((effectiveBitDepth ?: 0) > 16 || effectiveSampleRate > 48_000.0 || isHiResFlagged) -> {
+                        if (effectiveSampleRate > 96_000.0) QUALITY_MAX_HI_RES else QUALITY_HI_RES_96
+                    }
+                    explicitLosslessStream -> QUALITY_CD_LOSSLESS
+                    isLossyCodec && (stream?.bitrate ?: 0) in 1..160_000 -> QUALITY_DATA_SAVER
+                    isLossyCodec && (stream?.bitrate ?: 0) > 160_000 -> QUALITY_MP3_320
                     // 96k / Low / Data Saver tier:
-                    q == "low" || stream?.quality.equals("low", ignoreCase = true) || stream?.audioQuality.equals("low", ignoreCase = true) ||
-                        (isLossyCodec && (stream?.bitrate ?: 0) in 1..160_000) -> QUALITY_DATA_SAVER
+                    isLossyStream && (q == "low" || stream?.quality.equals("low", ignoreCase = true) || stream?.audioQuality.equals("low", ignoreCase = true)) -> QUALITY_DATA_SAVER
                     // 320k / High tier:
-                    q == "high" || stream?.quality.equals("high", ignoreCase = true) || stream?.audioQuality.equals("high", ignoreCase = true) ||
-                        (isLossyCodec && (stream?.bitrate ?: 0) > 160_000) -> QUALITY_MP3_320
+                    isLossyStream && (q == "high" || stream?.quality.equals("high", ignoreCase = true) || stream?.audioQuality.equals("high", ignoreCase = true)) -> QUALITY_MP3_320
                     (effectiveBitDepth ?: 0) > 16 || effectiveSampleRate > 48000.0 || isHiResFlagged -> {
                         if (effectiveSampleRate > 96000.0) QUALITY_MAX_HI_RES else QUALITY_HI_RES_96
                     }
                     streamCodec.equals("flac", ignoreCase = true) || effectiveBitDepth == 16 -> QUALITY_CD_LOSSLESS
                     else -> QUALITY_CD_LOSSLESS
+                }
+
+                if ((q == "high" && formatId != QUALITY_MP3_320) ||
+                    (q == "low" && formatId != QUALITY_DATA_SAVER)
+                ) {
+                    Log.i(TAG, "resolveFromAddon: candidate $trackId answered $q with tier $formatId; trying the next candidate")
+                    continue
                 }
 
                 // A hi_res request answered with ≤16-bit/≤48kHz is a silent
@@ -1553,14 +1600,14 @@ class LosslessMusicApi @Inject constructor(
     private fun extractLanguages(raw: String): Set<String> {
         if (raw.isBlank()) return emptySet()
         val result = mutableSetOf<String>()
-        if (Regex("""\p{IsTelugu}""").containsMatchIn(raw)) result += "telugu"
-        if (Regex("""\p{IsTamil}""").containsMatchIn(raw)) result += "tamil"
-        if (Regex("""\p{IsKannada}""").containsMatchIn(raw)) result += "kannada"
-        if (Regex("""\p{IsMalayalam}""").containsMatchIn(raw)) result += "malayalam"
-        if (Regex("""\p{IsGurmukhi}""").containsMatchIn(raw)) result += "punjabi"
-        if (Regex("""\p{IsBengali}""").containsMatchIn(raw)) result += "bengali"
-        if (Regex("""\p{IsGujarati}""").containsMatchIn(raw)) result += "gujarati"
-        if (Regex("""\p{IsDevanagari}""").containsMatchIn(raw)) result += "hindi"
+        if (Regex("""\p{Script=Telugu}""").containsMatchIn(raw)) result += "telugu"
+        if (Regex("""\p{Script=Tamil}""").containsMatchIn(raw)) result += "tamil"
+        if (Regex("""\p{Script=Kannada}""").containsMatchIn(raw)) result += "kannada"
+        if (Regex("""\p{Script=Malayalam}""").containsMatchIn(raw)) result += "malayalam"
+        if (Regex("""\p{Script=Gurmukhi}""").containsMatchIn(raw)) result += "punjabi"
+        if (Regex("""\p{Script=Bengali}""").containsMatchIn(raw)) result += "bengali"
+        if (Regex("""\p{Script=Gujarati}""").containsMatchIn(raw)) result += "gujarati"
+        if (Regex("""\p{Script=Devanagari}""").containsMatchIn(raw)) result += "hindi"
 
         val tokens = normalizeText(raw).split(' ').toSet()
         for (token in tokens) {

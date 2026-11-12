@@ -214,6 +214,24 @@ class ThemeRepository @Inject constructor(
         }
     }
 
+    /** System wallpaper (Monet) schemes, or null before Android 12 / on ROMs without them. */
+    private fun systemDynamicSchemes(amoled: Boolean): Pair<ColorScheme, ColorScheme>? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        return runCatching {
+            val dark = androidx.compose.material3.dynamicDarkColorScheme(context).let {
+                if (amoled) {
+                    it.copy(
+                        background = Color.Black,
+                        surface = Color.Black,
+                        surfaceContainerLow = Color.Black,
+                        surfaceContainerLowest = Color.Black,
+                    )
+                } else it
+            }
+            dark to androidx.compose.material3.dynamicLightColorScheme(context)
+        }.getOrNull()
+    }
+
     val uiState: StateFlow<ThemeUiState> = combine(
         themePreferences.prefs,
         dynamicHex,
@@ -224,17 +242,16 @@ class ThemeRepository @Inject constructor(
         val isGlass = prefs.liquidGlass
         val isLastWave = prefs.lastWaveTheme
         val nowPlayingActive = misc.dynamicNowPlayingEnabled && nowPlaying != null && !isLastWave
-        val (darkScheme, lightScheme) = when {
+        // Real wallpaper Monet on S+. Built here (not only in LastWaveTheme)
+        // so widgets and the media notification use the same colors as the UI.
+        val systemDynamic = if (prefs.accentMode == AccentMode.DYNAMIC && !isLastWave) systemDynamicSchemes(isAmoled) else null
+        val (baseDark, baseLight) = when {
             isLastWave -> {
                 val dark = Md3SchemeBuilder.buildLastWaveDarkScheme(isAmoled, isGlass)
                 val light = Md3SchemeBuilder.buildLastWaveLightScheme(isGlass)
                 dark to light
             }
-            nowPlayingActive -> {
-                val dark = Md3SchemeBuilder.buildDarkScheme(nowPlaying!!, isAmoled, isGlass)
-                val light = Md3SchemeBuilder.buildLightScheme(nowPlaying, isGlass)
-                dark to light
-            }
+            systemDynamic != null -> systemDynamic
             prefs.accentMode == AccentMode.MONOCHROME -> {
                 val dark = Md3SchemeBuilder.buildMonochromeDarkScheme(isAmoled, isGlass)
                 val light = Md3SchemeBuilder.buildMonochromeLightScheme(isGlass)
@@ -256,6 +273,16 @@ class ThemeRepository @Inject constructor(
                 val light = Md3SchemeBuilder.buildLightScheme(prefs.accentColor, isGlass)
                 dark to light
             }
+        }
+        // Artwork complements the wallpaper/accent theme instead of replacing it.
+        val (darkScheme, lightScheme) = if (nowPlayingActive) {
+            // Black-and-white covers blend in grey, not a made-up hue.
+            val mono = Md3SchemeBuilder.isAchromatic(nowPlaying!!)
+            val artDark = if (mono) Md3SchemeBuilder.buildMonochromeDarkScheme(isAmoled, isGlass) else Md3SchemeBuilder.buildDarkScheme(nowPlaying, isAmoled, isGlass)
+            val artLight = if (mono) Md3SchemeBuilder.buildMonochromeLightScheme(isGlass) else Md3SchemeBuilder.buildLightScheme(nowPlaying, isGlass)
+            Md3SchemeBuilder.blendNowPlaying(baseDark, artDark) to Md3SchemeBuilder.blendNowPlaying(baseLight, artLight)
+        } else {
+            baseDark to baseLight
         }
         ThemeUiState(
             darkColorScheme = darkScheme,

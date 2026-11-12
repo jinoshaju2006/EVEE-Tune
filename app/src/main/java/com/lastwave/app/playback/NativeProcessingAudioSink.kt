@@ -21,6 +21,28 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
+ * Media3 multiplies the AudioTrack buffer by 8 once AudioTrack playback params
+ * are enabled, headroom for 8x speed. [speedHeadroom] replaces that factor for
+ * the AudioTracks opened while it is set; null keeps Media3's sizing.
+ */
+class OutputBufferSizing : DefaultAudioSink.AudioTrackBufferSizeProvider {
+    @Volatile var speedHeadroom: Double? = null
+
+    override fun getBufferSizeInBytes(
+        minBufferSizeInBytes: Int,
+        encoding: Int,
+        outputMode: Int,
+        pcmFrameSize: Int,
+        sampleRate: Int,
+        bitrate: Int,
+        maxAudioTrackPlaybackSpeed: Double,
+    ): Int = DefaultAudioSink.AudioTrackBufferSizeProvider.DEFAULT.getBufferSizeInBytes(
+        minBufferSizeInBytes, encoding, outputMode, pcmFrameSize, sampleRate, bitrate,
+        speedHeadroom ?: maxAudioTrackPlaybackSpeed,
+    )
+}
+
+/**
  * Runs the optional native Float32 DSP in front of Media3 while keeping an
  * independent, conservative [DefaultAudioSink] ready as the fail-open path.
  * Devices that reject Float32 AudioTrack still receive the native DSP result;
@@ -42,6 +64,10 @@ class NativeProcessingAudioSink(
     private val exclusiveUsb: ExclusiveUsbOutput? = null,
     /** Fork: AAudio exclusive (MMAP) output on the phone's own outputs. */
     private val internalDirect: InternalDirectOutput? = null,
+    /** Loudness normalization; only touches the processed (non-bit-perfect) output. */
+    private val loudness: LoudnessStage? = null,
+    /** The provider both delegates were built with. */
+    val outputBufferSizing: OutputBufferSizing? = null,
 ) : AudioSink {
     private var activeDelegate: DefaultAudioSink = fallbackDelegate
     // Read on the main thread for the signal-path verdict, written on the
@@ -95,6 +121,8 @@ class NativeProcessingAudioSink(
     private var pendingAccessUnitCount = 0
     private var pendingOutputFrameCount = 0
     private var nextOutputPresentationTimeUs = 0L
+    private val pendingSkipUs = java.util.concurrent.atomic.AtomicLong()
+    private var skipCheckedBuffer: ByteBuffer? = null
 
     private var endOfStreamQueued = false
     private var endOfStreamOutput: ByteBuffer? = null
@@ -193,6 +221,7 @@ class NativeProcessingAudioSink(
     }
 
     override fun configure(format: Format, specifiedBufferSize: Int, outputChannels: IntArray?) {
+        loudness?.beginTrack(format)
         if (canReuseNativeProcessing(format, outputChannels)) {
             configuredFormat = format
             configuredBufferSize = specifiedBufferSize
@@ -523,13 +552,48 @@ class NativeProcessingAudioSink(
         }
     }
 
+    /**
+     * Drops the next [durationUs] of decoded PCM, so a muted deck jumps ahead
+     * by exactly that much. A speed change goes through the system
+     * time-stretcher, which landed up to 30 ms off. Zero cancels.
+     */
+    fun skipAhead(durationUs: Long) = pendingSkipUs.set(durationUs.coerceAtLeast(0L))
+
+    /** Trims the front of a fresh [buffer] by the pending skip; returns the time dropped. */
+    private fun dropPendingSkip(buffer: ByteBuffer): Long {
+        val skipUs = pendingSkipUs.get()
+        val format = configuredFormat
+        if (skipUs <= 0L || format == null || format.sampleMimeType != MimeTypes.AUDIO_RAW || format.sampleRate <= 0) {
+            return 0L
+        }
+        val frameBytes = androidx.media3.common.util.Util.getPcmFrameSize(format.pcmEncoding, format.channelCount)
+        val wanted = skipUs * format.sampleRate / MICROS_PER_SECOND
+        val frames = minOf(wanted, (buffer.remaining() / frameBytes).toLong()).toInt()
+        val droppedUs = frames * MICROS_PER_SECOND / format.sampleRate
+        pendingSkipUs.set(if (frames.toLong() == wanted) 0L else skipUs - droppedUs)
+        if (frames <= 0) return 0L
+        buffer.position(buffer.position() + frames * frameBytes)
+        // Lets the output re-anchor its clock, so the position reports the jump.
+        handleDiscontinuity()
+        return droppedUs
+    }
+
     override fun handleBuffer(
         buffer: ByteBuffer,
-        presentationTimeUs: Long,
+        bufferPresentationTimeUs: Long,
         encodedAccessUnitCount: Int,
     ): Boolean {
         maybeAdoptExclusiveUsb()
         maybeAdoptInternalDirect()
+        var presentationTimeUs = bufferPresentationTimeUs
+        if (skipCheckedBuffer !== buffer) {
+            skipCheckedBuffer = buffer
+            presentationTimeUs += dropPendingSkip(buffer)
+            if (!buffer.hasRemaining()) {
+                skipCheckedBuffer = null
+                return true
+            }
+        }
         val analyzer = hapticsAnalyzer
         if (analyzer != null && hapticsBuffer !== buffer) {
             hapticsBuffer = buffer
@@ -554,6 +618,7 @@ class NativeProcessingAudioSink(
         if (consumed) {
             directEqBuffer = null
             hapticsBuffer = null
+            skipCheckedBuffer = null
         }
         return consumed
     }
@@ -693,11 +758,10 @@ class NativeProcessingAudioSink(
                 C.ENCODING_PCM_16BIT -> {
                     var pos = startPos
                     while (pos + 1 < endPos) {
-                        val sample = buffer.getShort(pos).toInt()
-                        val rawFloat = (sample / 32768f) * gain
-                        val s = kotlin.math.tanh(rawFloat * 0.85f) * 1.12f
-                        val pcm = (s * 32767f).toInt().coerceIn(-32767, 32767).toShort()
-                        buffer.putShort(pos, pcm)
+                        // Linear like the other encodings: the old tanh "soft clip"
+                        // cost ~0.4 dB everywhere and up to 2.2 dB on peaks.
+                        val scaled = kotlin.math.round(buffer.getShort(pos) * gain).toInt()
+                        buffer.putShort(pos, scaled.coerceIn(-32768, 32767).toShort())
                         pos += 2
                     }
                 }
@@ -750,6 +814,7 @@ class NativeProcessingAudioSink(
             processor.queueInput(buffer.duplicate())
             pendingInputLimit = buffer.limit()
             val output = processor.getOutput()
+            applyLoudness(output)
             pendingOutput = output
             pendingPresentationTimeUs = presentationTimeUs
             pendingAccessUnitCount = encodedAccessUnitCount
@@ -772,6 +837,12 @@ class NativeProcessingAudioSink(
         return true
     }
 
+    private fun applyLoudness(output: ByteBuffer) {
+        // Bit-Perfect promises an untouched signal even on its compat path.
+        if (bitPerfectRequested) return
+        loudness?.process(output, outputChannelCount, processor.nativeOutputSampleRate)
+    }
+
     override fun playToEndOfStream() {
         if (usbExclusive) {
             if (exclusiveConvertSourceHz > 0) drainExclusiveConverterTail()
@@ -790,7 +861,7 @@ class NativeProcessingAudioSink(
         try {
             if (!endOfStreamQueued) {
                 processor.queueEndOfStream()
-                endOfStreamOutput = processor.getOutput()
+                endOfStreamOutput = processor.getOutput().also(this::applyLoudness)
                 endOfStreamQueued = true
             }
             val tail = endOfStreamOutput
