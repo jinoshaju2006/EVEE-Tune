@@ -315,15 +315,26 @@ jobs:
               raise SystemExit("Could not replace the first-launch Join Support dialog; stopping without committing.")
           main_shell.write_text(shell, encoding="utf-8")
 
-          # Use the supplied EVEE Tune artwork in the About & Community card itself.
-          settings_screen = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsScreen.kt")
-          screen = settings_screen.read_text(encoding="utf-8")
-          about_icon_old = 'painter = painterResource(appIcon.logoRes),\n                    contentDescription = "EVEE Tune"'
-          about_icon_new = 'painter = painterResource(R.drawable.evee_icon),\n                    contentDescription = "EVEE Tune"'
-          if about_icon_old not in screen:
-              raise SystemExit("Could not locate the About card logo; stopping without committing.")
-          screen = screen.replace(about_icon_old, about_icon_new, 1)
-          settings_screen.write_text(screen, encoding="utf-8")
+          # Brand the About card in the v5.2 split SettingsAboutSection file.
+          about_file = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsAboutSection.kt")
+          if not about_file.exists():
+              raise SystemExit("Could not find SettingsAboutSection.kt.")
+          about_source = about_file.read_text(encoding="utf-8")
+          about_source, logo_count = re.subn(
+              r'painter = painterResource\(appIcon\.logoRes\),\s*contentDescription = "LastWave"',
+              'painter = painterResource(R.drawable.evee_icon),\n                    contentDescription = "EVEE Tune"',
+              about_source,
+              count=1,
+          )
+          about_source, title_count = re.subn(
+              r'Text\("LastWave", style = MaterialTheme\.typography\.headlineSmall',
+              'Text("EVEE Tune", style = MaterialTheme.typography.headlineSmall',
+              about_source,
+              count=1,
+          )
+          if logo_count != 1 or title_count != 1:
+              raise SystemExit("Could not apply EVEE Tune About-card logo/title branding.")
+          about_file.write_text(about_source, encoding="utf-8")
 
           # Connect the four appearance choices to the supplied EVEE Tune artwork.
           app_icon_file = Path("app/src/main/java/com/lastwave/app/data/local/AppIcon.kt")
@@ -362,41 +373,41 @@ jobs:
               manifest = manifest[:match.start(1)] + block + manifest[match.end(1):]
           manifest_file.write_text(manifest, encoding="utf-8")
 
-          # Remove the LastWave desktop promotion from both About locations,
-          # and remove the complete More from us section and its three app cards.
+          # Remove the desktop and More from us promotions from the main settings screen.
+          settings_screen = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsScreen.kt")
           screen = settings_screen.read_text(encoding="utf-8")
-
           desktop_card_pattern = (
               r'                    SettingsActionCard\(\n'
-              r'                        icon = Icons\.Filled\.Download,.*?'
+              r'                        icon = Icons\\.Filled\\.Download,.*?'
               r'                    \)\n\n'
-              r'                    Spacer\(Modifier\.height\(14\.dp\)\)\n'
+              r'                    Spacer\(Modifier\\.height\(14\\.dp\)\)\n'
               r'                    SectionLabel\("More from us"\)\n'
-              r'                    Spacer\(Modifier\.height\(8\.dp\)\)\n'
+              r'                    Spacer\(Modifier\\.height\(8\\.dp\)\)\n'
               r'                    MoreFromUsCard\(.*?\n                    \)\n'
           )
           screen, promo_count = re.subn(desktop_card_pattern, '', screen, count=1, flags=re.DOTALL)
           if promo_count != 1:
               raise SystemExit("Could not remove the desktop and More from us promotional section.")
-
-          # Remove the now-unused three-app promotional composable.
           screen, more_count = re.subn(
-              r'private fun MoreFromUsCard\(.*?(?=private fun AboutCard\()',
+              r'private fun MoreFromUsCard\(.*?(?=private fun )',
               '',
               screen,
               count=1,
               flags=re.DOTALL,
           )
           if more_count != 1:
-              raise SystemExit("Could not remove the MoreFromUsCard composable.")
+              raise SystemExit("Could not remove the MoreFromUsCard promotional composable.")
+          if "LastWave-Desktop" in screen or 'SectionLabel("More from us")' in screen or "MoreFromUsCard(" in screen:
+              raise SystemExit("LastWave desktop or More from us promotion remains.")
+          settings_screen.write_text(screen, encoding="utf-8")
 
-          # Remove everything after the About card's developer-credit text;
-          # this tail is the upstream desktop-download pill and its nested layout.
-          about_start = screen.find("private fun AboutCard(")
-          about_end = screen.find("\nprivate fun openTelegramChannel", about_start)
-          if about_start < 0 or about_end < 0:
-              raise SystemExit("Could not locate the About card to remove its desktop link.")
-          about = screen[about_start:about_end]
+          # Remove the desktop download pill from the separate About card source.
+          about_file = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsAboutSection.kt")
+          about_source = about_file.read_text(encoding="utf-8")
+          about_start = about_source.find("internal fun AboutCard(")
+          if about_start < 0:
+              raise SystemExit("Could not locate AboutCard in SettingsAboutSection.kt.")
+          about = about_source[about_start:]
           about, about_desktop_count = re.subn(
               r'(            Text\(\n'
               r'                stringResource\(R\.string\.about_made_by\),.*?\n'
@@ -408,12 +419,11 @@ jobs:
               flags=re.DOTALL,
           )
           if about_desktop_count != 1:
-              raise SystemExit("Could not remove the complete desktop download area from the About card.")
-          screen = screen[:about_start] + about + screen[about_end:]
-
-          if "LastWave-Desktop" in screen or 'SectionLabel("More from us")' in screen or "MoreFromUsCard(" in screen:
-              raise SystemExit("Promotional LastWave desktop or More from us content remains.")
-          settings_screen.write_text(screen, encoding="utf-8")
+              raise SystemExit("Could not remove the About-card desktop download pill.")
+          about_source = about_source[:about_start] + about
+          if "LastWave-Desktop" in about_source:
+              raise SystemExit("LastWave desktop link remains in AboutCard.")
+          about_file.write_text(about_source, encoding="utf-8")
 
           # Add an opt-in Android 15+ floating music capsule. This is deliberately
           # isolated from the playback engine and is removed automatically when playback stops.
