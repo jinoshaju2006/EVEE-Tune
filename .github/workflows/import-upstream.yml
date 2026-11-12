@@ -592,7 +592,7 @@ jobs:
 
           service_file = Path("app/src/main/java/com/lastwave/app/playback/MusicPlaybackService.kt")
           service = service_file.read_text(encoding="utf-8")
-          field_anchor = '    private var widgetSignature = ""'
+          field_anchor = '    internal var widgetSignature = ""'
           if field_anchor not in service:
               raise SystemExit("Could not locate playback service field insertion point.")
           if "private var dynamicBarOverlay" not in service:
@@ -793,7 +793,7 @@ jobs:
           - App label: **EVEE Tune**
           - Android application ID: `com.evee.tune`
           - Upstream code namespace: `com.lastwave.app` (kept internally to avoid breaking upstream component references)
-          - Upstream baseline: verified build commit `6c7e9d8c3c14a6798de7251e21d723a62044508f` (LastWave v5.1.2)
+          - Upstream baseline: LastWave v5.2.0 tag commit `6c7e9d8c3c14a6798de7251e21d723a62044508f`
           - Build: GitHub Actions debug APK
 
           ## Build
