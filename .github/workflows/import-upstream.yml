@@ -378,25 +378,16 @@ jobs:
           screen = settings_screen.read_text(encoding="utf-8")
           desktop_card_pattern = (
               r'                    SettingsActionCard\(\n'
-              r'                        icon = Icons\\.Filled\\.Download,.*?'
+              r'                        icon = Icons\.Filled\.Download,.*?'
               r'                    \)\n\n'
-              r'                    Spacer\(Modifier\\.height\(14\\.dp\)\)\n'
+              r'                    Spacer\(Modifier\.height\(14\.dp\)\)\n'
               r'                    SectionLabel\("More from us"\)\n'
-              r'                    Spacer\(Modifier\\.height\(8\\.dp\)\)\n'
+              r'                    Spacer\(Modifier\.height\(8\.dp\)\)\n'
               r'                    MoreFromUsCard\(.*?\n                    \)\n'
           )
           screen, promo_count = re.subn(desktop_card_pattern, '', screen, count=1, flags=re.DOTALL)
           if promo_count != 1:
               raise SystemExit("Could not remove the desktop and More from us promotional section.")
-          screen, more_count = re.subn(
-              r'private fun MoreFromUsCard\(.*?(?=private fun )',
-              '',
-              screen,
-              count=1,
-              flags=re.DOTALL,
-          )
-          if more_count != 1:
-              raise SystemExit("Could not remove the MoreFromUsCard promotional composable.")
           if "LastWave-Desktop" in screen or 'SectionLabel("More from us")' in screen or "MoreFromUsCard(" in screen:
               raise SystemExit("LastWave desktop or More from us promotion remains.")
           settings_screen.write_text(screen, encoding="utf-8")
