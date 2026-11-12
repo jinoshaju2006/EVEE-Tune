@@ -740,6 +740,107 @@ jobs:
               'subtitle = "v\${appVersionName(context)} • Language, Community, Source code"',
               1,
           )
+          # v5.2.0 stores the bullet as a Kotlin unicode escape, so match the whole line too.
+          screen, subtitle_count = re.subn(
+              r'(?m)^\s*subtitle = if \(updateInfo\.isUpdateAvailable\).*          screen, banner_count = re.subn(
+              r'\n\s*// Prominent Update Available Banner Card.*?(?=\n\s*AboutCard\()',
+              '',
+              screen,
+              count=1,
+              flags=re.DOTALL,
+          )
+          screen, update_card_count = re.subn(
+              r'\n\s*SettingsActionCard\(\n\s*icon = Icons\.Filled\.CloudDownload,.*?isHighlighted = \(highlightedSettingId == "about\.check_updates"\),\n\s*\)\n',
+              '\n',
+              screen,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if banner_count != 1 or update_card_count != 1:
+              raise SystemExit("Could not remove both LastWave update UI elements.")
+          screen = screen.replace(
+              'github.com/Clash-Projects/LastWave-native',
+              'github.com/jinoshaju2006/EVEE-Tune',
+          )
+          screen = screen.replace(
+              'https://github.com/Clash-Projects/LastWave-native',
+              'https://github.com/jinoshaju2006/EVEE-Tune',
+          )
+          if "updateInfo" in screen or "about.check_updates" in screen or "LastWave-native/releases" in screen:
+              raise SystemExit("LastWave update UI references remain in SettingsScreen.")
+          settings_screen.write_text(screen, encoding="utf-8")
+
+          search_index = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsSearchIndex.kt")
+          if search_index.exists():
+              index_text = search_index.read_text(encoding="utf-8")
+              index_text, index_count = re.subn(
+                  r'\n            add\(\n                SettingsEntry\(\n                    id = "about\.check_updates",.*?\n            \)\n',
+                  '\n',
+                  index_text,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if index_count != 1:
+                  raise SystemExit("Could not remove the LastWave update entry from settings search.")
+              search_index.write_text(index_text, encoding="utf-8")
+
+          PY
+
+          cat > README.md <<'EOF'
+          # EVEE Tune
+
+          EVEE Tune is an independent Android app rebrand based on [LastWave Native](https://github.com/Clash-Projects/LastWave-Native).
+
+          ## Current build identity
+          - App label: **EVEE Tune**
+          - Android application ID: `com.evee.tune`
+          - Upstream code namespace: `com.lastwave.app` (kept internally to avoid breaking upstream component references)
+          - Upstream baseline: LastWave v5.2.0 tag commit `6c7e9d8c3c14a6798de7251e21d723a62044508f`
+          - Build: GitHub Actions debug APK
+
+          ## Build
+          Open **Actions → Import EVEE Tune Android source → Run workflow**. The workflow imports the upstream Android source, applies the EVEE Tune app label and application ID, commits the source, and attempts a debug APK build. The APK is uploaded as an Actions artifact when the build succeeds.
+
+          For a local build, use Android Studio with JDK 17 and Android SDK 37, then run:
+
+          ```bash
+          ./gradlew :app:assembleDebug
+          ```
+
+          ## Attribution and license
+          This project is based on LastWave Native by its upstream contributors. Upstream copyright notices and the GPL-3.0 license are preserved in this repository. See [LICENSE](LICENSE) and the [upstream repository](https://github.com/Clash-Projects/LastWave-Native).
+
+          EVEE Tune is independent and is not affiliated with or endorsed by the upstream developers or any music service. All third-party names and trademarks belong to their respective owners.
+          EOF
+
+      - name: Commit imported source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import LastWave Native source and rebrand as EVEE Tune"
+          git push origin HEAD
+
+      - name: Build EVEE Tune debug APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EVEE-Tune-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+,
+              '                                            subtitle = "v\${appVersionName(context)} • Language, Community, Source code",',
+              screen,
+              count=1,
+          )
+          if subtitle_count != 1:
+              raise SystemExit("Could not safely remove the update-dependent About subtitle.")
           screen, banner_count = re.subn(
               r'\n\s*// Prominent Update Available Banner Card.*?(?=\n\s*AboutCard\()',
               '',
