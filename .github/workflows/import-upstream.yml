@@ -699,102 +699,43 @@ jobs:
               screen = screen[:group_close] + '\n' + dynamic_row + screen[group_close:]
           screen_file.write_text(screen, encoding="utf-8")
 
-          # EVEE Tune must not poll LastWave releases or surface LastWave update prompts.
-          # Keep the manager API as a no-op because SettingsViewModel still injects it.
+          # EVEE Tune owns its updater: check only EVEE Tune GitHub Releases.
+          # Keep the existing About update card, banner, version comparison and release notes UI.
           update_manager_file = Path("app/src/main/java/com/lastwave/app/data/update/AppUpdateManager.kt")
-          if update_manager_file.exists():
-              manager = update_manager_file.read_text(encoding="utf-8")
-              manager = manager.replace(
-                  '    init {\n        checkForUpdate(isSilent = true)\n    }\n',
-                  '',
+          if not update_manager_file.exists():
+              raise SystemExit("Could not find the upstream update manager.")
+          manager = update_manager_file.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  "https://api.github.com/repos/Clash-Projects/LastWave-native/releases/latest",
+                  "https://api.github.com/repos/jinoshaju2006/EVEE-Tune/releases/latest",
                   1,
-              )
-              manager, check_count = re.subn(
-                  r'    fun checkForUpdate\(isSilent: Boolean = false\) \{.*?\n    \}',
-                  '    fun checkForUpdate(isSilent: Boolean = false) {\\n        _updateInfo.update { it.copy(isChecking = false, isUpdateAvailable = false, message = null) }\\n    }',
-                  manager,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-              manager, open_count = re.subn(
-                  r'    fun openUpdate\(context: Context\) \{.*?\n    \}',
-                  '    fun openUpdate(context: Context) { /* LastWave updater disabled in EVEE Tune. */ }',
-                  manager,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-              if check_count != 1 or open_count != 1:
-                  raise SystemExit("Could not safely disable the upstream update manager.")
-              update_manager_file.write_text(manager, encoding="utf-8")
+              ),
+              (
+                  "https://github.com/Clash-Projects/LastWave-native/releases",
+                  "https://github.com/jinoshaju2006/EVEE-Tune/releases",
+                  2,
+              ),
+              ('"LastWave-Android"', '"EVEE-Tune-Android"', 1),
+              ('getSharedPreferences("lastwave_updates",', 'getSharedPreferences("evee_tune_updates",', 1),
+          ]
+          for old, new, expected in replacements:
+              found = manager.count(old)
+              if found != expected:
+                  raise SystemExit(f"Updater patch expected {expected} occurrence(s) of {old!r}, found {found}.")
+              manager = manager.replace(old, new)
+          if "Clash-Projects/LastWave" in manager or "lastwave_updates" in manager:
+              raise SystemExit("A LastWave update endpoint or preference namespace remains.")
+          update_manager_file.write_text(manager, encoding="utf-8")
 
-          # Remove all update UI and its settings-search shortcut.
+          # Keep the About update card and banner. They now display EVEE Tune releases.
           settings_screen = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsScreen.kt")
           screen = settings_screen.read_text(encoding="utf-8")
-          screen = screen.replace(
-              '    val updateInfo by viewModel.updateInfo.collectAsStateWithLifecycle()\n',
-              '',
-              1,
-          )
-          screen = screen.replace(
-              'subtitle = if (updateInfo.isUpdateAvailable) "Update Available (\${updateInfo.latestVersion}) • v\${appVersionName(context)}" else "v\${appVersionName(context)} • Language, Community, Source code"',
-              'subtitle = "v\${appVersionName(context)} • Language, Community, Source code"',
-              1,
-          )
-          # Remove the update-dependent About subtitle (v5.2.0 source uses a Unicode bullet escape).
-          screen, subtitle_count = re.subn(
-              r'(?m)^\s*subtitle = if \(updateInfo\.isUpdateAvailable\).*$',
-              '                                            subtitle = "v${appVersionName(context)} • Language, Community, Source code",',
-              screen,
-              count=1,
-          )
-          if subtitle_count != 1:
-              raise SystemExit("Could not safely remove the update-dependent About subtitle.")
-          screen, banner_count = re.subn(
-              r'\n[ \t]*// Prominent Update Available Banner Card.*?(?=\n[ \t]*AboutCard\()',
-              '\n',
-              screen,
-              count=1,
-              flags=re.DOTALL,
-          )
-          # Remove only the About update card. Locate it by its unique highlight ID,
-          # then remove the nearest SettingsActionCard call (never a generic CloudDownload card).
-          update_marker = 'isHighlighted = (highlightedSettingId == "about.check_updates"),'
-          if screen.count(update_marker) != 1:
-              raise SystemExit("Could not uniquely locate the About update card.")
-          marker_index = screen.index(update_marker)
-          card_start = screen.rfind("SettingsActionCard(", 0, marker_index)
-          card_end = screen.find("\n                    )", marker_index)
-          if card_start < 0 or card_end < 0:
-              raise SystemExit("Could not safely bound the About update card.")
-          screen = screen[:card_start] + screen[card_end + len("\n                    )"): ]
-          update_card_count = 1
-          if banner_count != 1 or update_card_count != 1:
-              raise SystemExit("Could not remove both LastWave update UI elements.")
-          screen = screen.replace(
-              'github.com/Clash-Projects/LastWave-native',
-              'github.com/jinoshaju2006/EVEE-Tune',
-          )
-          screen = screen.replace(
-              'https://github.com/Clash-Projects/LastWave-native',
-              'https://github.com/jinoshaju2006/EVEE-Tune',
-          )
-          if "updateInfo" in screen or "about.check_updates" in screen or "LastWave-native/releases" in screen:
-              raise SystemExit("LastWave update UI references remain in SettingsScreen.")
+          if "about.check_updates" not in screen or "updateInfo.isUpdateAvailable" not in screen:
+              raise SystemExit("The EVEE Tune in-app update UI is missing from the imported Settings screen.")
+          if "Clash-Projects/LastWave-native/releases" in screen:
+              raise SystemExit("A LastWave release link remains in the Settings screen.")
           settings_screen.write_text(screen, encoding="utf-8")
-
-          search_index = Path("app/src/main/java/com/lastwave/app/ui/settings/SettingsSearchIndex.kt")
-          if search_index.exists():
-              index_text = search_index.read_text(encoding="utf-8")
-              index_text, index_count = re.subn(
-                  r'\n            add\(\n                SettingsEntry\(\n                    id = "about\.check_updates",.*?\n            \)\n',
-                  '\n',
-                  index_text,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-              if index_count != 1:
-                  raise SystemExit("Could not remove the LastWave update entry from settings search.")
-              search_index.write_text(index_text, encoding="utf-8")
 
           PY
 
