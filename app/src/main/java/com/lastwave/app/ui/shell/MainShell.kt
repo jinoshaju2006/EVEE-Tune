@@ -236,6 +236,7 @@ private fun <T> navSpring() = ExpressiveMotion.spatialSpring<T>()
 fun MainShell(
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenVideo: () -> Unit = {},
     onOpenDiscover: () -> Unit,
     onOpenGenres: () -> Unit,
     onOpenFriends: () -> Unit,
@@ -419,6 +420,7 @@ fun MainShell(
                         MainTab.FEED -> FeedScreen(
                             onOpenSettings = onOpenSettings,
                             onOpenSearch = onOpenSearch,
+                            onOpenVideo = onOpenVideo,
                             onOpenDiscover = onOpenDiscover,
                             onOpenPlaylist = onOpenPlaylist,
                             onOpenFeedPlaylist = onOpenFeedPlaylist,
