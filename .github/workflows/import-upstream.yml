@@ -133,7 +133,7 @@ jobs:
               if downloads_at < 0 or playlists_at < 0 or downloads_at > playlists_at:
                   raise SystemExit("Could not locate the HomeScreen downloads callback for EVEE Video.")
               insert_at = downloads_at + len(downloads_marker)
-              shell = shell[:insert_at] + '\\n                            onOpenVideo = onOpenVideo,' + shell[insert_at:]
+              shell = shell[:insert_at] + '\n                            onOpenVideo = onOpenVideo,' + shell[insert_at:]
           shell_file.write_text(shell, encoding="utf-8")
 
           home_file = Path("app/src/main/java/com/lastwave/app/ui/home/HomeScreen.kt")
