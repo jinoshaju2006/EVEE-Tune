@@ -294,6 +294,7 @@ fun LastWaveNavHost(
                     navController.navigate(Screen.Settings.route) { launchSingleTop = true }
                 },
                 onOpenSearch = { navController.navigate(Screen.Search.route) },
+                onOpenVideo = { navController.navigate(Screen.Video.route) { launchSingleTop = true } },
                 onOpenDiscover = { navController.navigate(Screen.Discover.route) },
                 onOpenGenres = { navController.navigate(Screen.Genres.route) },
                 onOpenFriends = { navController.navigate(Screen.Friends.route) },
@@ -332,6 +333,14 @@ fun LastWaveNavHost(
                     }
                 },
             )
+        }
+
+        composable(Screen.Video.route) { backStackEntry ->
+            PredictiveBackScreen(onBack = { navController.safePopBackStack(backStackEntry) }) {
+                com.lastwave.app.ui.video.VideoScreen(
+                    onBack = { navController.safePopBackStack(backStackEntry) },
+                )
+            }
         }
 
         composable(Screen.Create.route) { backStackEntry ->
