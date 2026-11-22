@@ -420,7 +420,6 @@ fun MainShell(
                         MainTab.FEED -> FeedScreen(
                             onOpenSettings = onOpenSettings,
                             onOpenSearch = onOpenSearch,
-                            onOpenVideo = onOpenVideo,
                             onOpenDiscover = onOpenDiscover,
                             onOpenPlaylist = onOpenPlaylist,
                             onOpenFeedPlaylist = onOpenFeedPlaylist,
@@ -441,6 +440,7 @@ fun MainShell(
                             onOpenGenres = onOpenGenres,
                             onOpenFriends = onOpenFriends,
                             onOpenDownloads = onOpenDownloads,
+                            onOpenVideo = onOpenVideo,
                         )
                         MainTab.PLAYLISTS -> PlaylistScreen(
                             onOpenPlaylist = onOpenPlaylist,
