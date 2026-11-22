@@ -90,7 +90,7 @@ jobs:
               marker = '    data object SpotifyLogin : Screen("spotify_login")'
               if marker not in screen:
                   raise SystemExit("Could not locate Screen route insertion point.")
-              screen = screen.replace(marker, '    data object Video : Screen("video")\\n' + marker, 1)
+              screen = screen.replace(marker, '    data object Video : Screen("video")\n' + marker, 1)
           screen_file.write_text(screen, encoding="utf-8")
 
           nav_file = Path("app/src/main/java/com/lastwave/app/ui/navigation/NavGraph.kt")
@@ -99,7 +99,7 @@ jobs:
           if 'onOpenVideo = { navController.navigate(Screen.Video.route)' not in nav:
               if main_marker not in nav:
                   raise SystemExit("Could not locate MainShell callbacks for EVEE Video.")
-              nav = nav.replace(main_marker, main_marker + '\\n                onOpenVideo = { navController.navigate(Screen.Video.route) { launchSingleTop = true } },', 1)
+              nav = nav.replace(main_marker, main_marker + '\n                onOpenVideo = { navController.navigate(Screen.Video.route) { launchSingleTop = true } },', 1)
           if 'composable(Screen.Video.route)' not in nav:
               route_marker = '        composable(Screen.Create.route) { backStackEntry ->'
               if route_marker not in nav:
@@ -122,12 +122,12 @@ jobs:
           if '    onOpenVideo: () -> Unit = {},' not in shell:
               if shell_sig not in shell:
                   raise SystemExit("Could not locate MainShell callback signature for EVEE Video.")
-              shell = shell.replace(shell_sig, shell_sig + '\\n    onOpenVideo: () -> Unit = {},', 1)
+              shell = shell.replace(shell_sig, shell_sig + '\n    onOpenVideo: () -> Unit = {},', 1)
           home_call = '                            onOpenSearch = onOpenSearch,'
           if '                            onOpenVideo = onOpenVideo,' not in shell:
               if home_call not in shell:
                   raise SystemExit("Could not locate HomeScreen call for EVEE Video.")
-              shell = shell.replace(home_call, home_call + '\\n                            onOpenVideo = onOpenVideo,', 1)
+              shell = shell.replace(home_call, home_call + '\n                            onOpenVideo = onOpenVideo,', 1)
           shell_file.write_text(shell, encoding="utf-8")
 
           home_file = Path("app/src/main/java/com/lastwave/app/ui/home/HomeScreen.kt")
@@ -136,17 +136,17 @@ jobs:
           if 'import androidx.compose.material.icons.filled.SmartDisplay' not in home:
               if search_import not in home:
                   raise SystemExit("Could not locate HomeScreen icon imports for EVEE Video.")
-              home = home.replace(search_import, search_import + '\\nimport androidx.compose.material.icons.filled.SmartDisplay', 1)
+              home = home.replace(search_import, search_import + '\nimport androidx.compose.material.icons.filled.SmartDisplay', 1)
           downloads_sig = '    onOpenDownloads: () -> Unit = {},'
           if '    onOpenVideo: () -> Unit = {},' not in home:
               if downloads_sig not in home:
                   raise SystemExit("Could not locate HomeScreen callback signature for EVEE Video.")
-              home = home.replace(downloads_sig, downloads_sig + '\\n    onOpenVideo: () -> Unit = {},', 1)
+              home = home.replace(downloads_sig, downloads_sig + '\n    onOpenVideo: () -> Unit = {},', 1)
           search_action = '                        HeaderActionIcon(Icons.Filled.Search, "Search", onOpenSearch)'
           if 'HeaderActionIcon(Icons.Filled.SmartDisplay, "Videos", onOpenVideo)' not in home:
               if search_action not in home:
                   raise SystemExit("Could not locate HomeScreen header actions for EVEE Video.")
-              home = home.replace(search_action, search_action + '\\n                        HeaderActionIcon(Icons.Filled.SmartDisplay, "Videos", onOpenVideo)', 1)
+              home = home.replace(search_action, search_action + '\n                        HeaderActionIcon(Icons.Filled.SmartDisplay, "Videos", onOpenVideo)', 1)
           home_file.write_text(home, encoding="utf-8")
 
           gradle_file = Path("app/build.gradle.kts")
