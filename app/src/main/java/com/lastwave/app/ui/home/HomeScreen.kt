@@ -91,6 +91,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Scaffold
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.MoreVert
@@ -174,6 +175,7 @@ fun HomeScreen(
     onOpenGenres: () -> Unit,
     onOpenFriends: () -> Unit,
     onOpenDownloads: () -> Unit = {},
+    onOpenVideo: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     artistAlbumNavigator: com.lastwave.app.ui.navigation.ArtistAlbumNavigator = hiltViewModel<ArtistAlbumNavBridgeHome>().navigator,
 ) {
@@ -200,6 +202,7 @@ fun HomeScreen(
                     actions = {
                         HeaderActionIcon(Icons.Filled.Download, "Downloads", onOpenDownloads)
                         HeaderActionIcon(Icons.Filled.Search, "Search", onOpenSearch)
+                        HeaderActionIcon(Icons.Filled.SmartDisplay, "Videos", onOpenVideo)
                         IconButton(onClick = onOpenSettings) {
                             ProfileAvatar(avatarUrl = uiState.stats?.avatarUrl, modifier = Modifier.size(38.dp))
                         }
