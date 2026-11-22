@@ -123,11 +123,11 @@ jobs:
               if shell_sig not in shell:
                   raise SystemExit("Could not locate MainShell callback signature for EVEE Video.")
               shell = shell.replace(shell_sig, shell_sig + '\n    onOpenVideo: () -> Unit = {},', 1)
-          home_call = '                            onOpenSearch = onOpenSearch,'
+          home_call = '                            onOpenDownloads = onOpenDownloads,\\n                        )\\n                        MainTab.PLAYLISTS'
           if '                            onOpenVideo = onOpenVideo,' not in shell:
               if home_call not in shell:
-                  raise SystemExit("Could not locate HomeScreen call for EVEE Video.")
-              shell = shell.replace(home_call, home_call + '\n                            onOpenVideo = onOpenVideo,', 1)
+                  raise SystemExit("Could not locate HomeScreen callback insertion point for EVEE Video.")
+              shell = shell.replace(home_call, '                            onOpenDownloads = onOpenDownloads,\\n                            onOpenVideo = onOpenVideo,\\n                        )\\n                        MainTab.PLAYLISTS', 1)
           shell_file.write_text(shell, encoding="utf-8")
 
           home_file = Path("app/src/main/java/com/lastwave/app/ui/home/HomeScreen.kt")
