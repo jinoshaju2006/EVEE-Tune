@@ -796,3 +796,12 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish EVEE Tune GitHub release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v5.4.0 app/build/outputs/apk/debug/*.apk \
+            --title "EVEE Tune 5.4.0" \
+            --notes "EVEE Tune 5.4.0\n\n- Updated Android app version to 5.4.0 (version code 33).\n- Built from the EVEE Tune Android source workflow.\n\nThis release currently provides a debug APK."
