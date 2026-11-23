@@ -846,8 +846,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Import LastWave Native source and rebrand as EVEE Tune"
-          git push origin HEAD
+          git commit -m "Import LastWave Native source and rebrand as EVEE Tune" || echo "No source changes to commit"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
 
       - name: Build EVEE Tune debug APK
         run: |
