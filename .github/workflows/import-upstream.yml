@@ -90,7 +90,7 @@ jobs:
           gradle = gradle.replace(old, new, 1)
           # Keep EVEE Tune's published version independent of the upstream baseline.
           gradle, version_name_count = re.subn(r'versionName = "[^"]+"', 'versionName = "5.4.0"', gradle, count=1)
-          gradle, version_code_count = re.subn(r'versionCode = \\d+', 'versionCode = 33', gradle, count=1)
+          gradle, version_code_count = re.subn(r'versionCode = \d+', 'versionCode = 33', gradle, count=1)
           if version_name_count != 1 or version_code_count != 1:
               raise SystemExit("Could not set EVEE Tune version 5.4.0 (code 33).")
           gradle_file.write_text(gradle, encoding="utf-8")
