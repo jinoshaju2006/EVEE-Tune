@@ -29,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.lastwave.app.playback.AndroidAutoMediaLibrary
 import com.lastwave.app.playback.MusicPlaybackService
 import com.lastwave.app.playback.MusicPlayer
@@ -262,7 +262,6 @@ private fun EveeTvHome(
                                                 searchMode = false
                                             } else if (item.isPlayable) {
                                                 onPlayItem(item)
-                                                onStartPlaybackService()
                                             }
                                         },
                                     ) {
@@ -288,7 +287,6 @@ private fun EveeTvHome(
                                             modifier = Modifier.height(62.dp),
                                             onClick = {
                                                 onPlayItem(item)
-                                                onStartPlaybackService()
                                             },
                                         ) { Text("PLAY") }
                                     }
