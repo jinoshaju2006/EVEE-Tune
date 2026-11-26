@@ -385,15 +385,6 @@ android {
             signingConfig = signingConfigs.getByName("release_config")
             // proguardFiles from initWith are ignored when minify is off
         }
-
-        // A separately installable Android TV edition. The existing mobile
-        // release variant and application ID remain unchanged.
-        create("tvRelease") {
-            initWith(getByName("release"))
-            applicationIdSuffix = ".tv"
-            versionNameSuffix = "-tv"
-            matchingFallbacks += listOf("release")
-        }
         debug {
             isDebuggable = true
         }
